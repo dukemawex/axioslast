@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as authService from '../services/auth.service';
+import type { RegisterInput } from '../services/auth.service';
 
-const registerSchema = z.object({
+const registerSchema: z.ZodType<RegisterInput> = z.object({
   email: z.string().email(),
   phone: z.string().regex(/^\+?[1-9]\d{1,14}$/),
   password: z.string().min(8),
