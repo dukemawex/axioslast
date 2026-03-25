@@ -34,7 +34,7 @@ export async function sendWelcomeEmail(to: string, firstName: string): Promise<v
         <h2 style="color: #1A2332;">Welcome, ${firstName}! 🎉</h2>
         <p style="color: #5A6474;">Your account is fully verified. You're ready to swap currencies across Africa.</p>
         <div style="background: #C8772A; border-radius: 8px; padding: 16px 24px; display: inline-block; margin: 24px 0;">
-          <a href="${process.env.FRONTEND_URL}/dashboard" style="color: white; text-decoration: none; font-weight: bold;">Go to Dashboard →</a>
+          <a href="${env.FRONTEND_URL}/dashboard" style="color: white; text-decoration: none; font-weight: bold;">Go to Dashboard →</a>
         </div>
         <p style="color: #5A6474;">Supported currencies: NGN, UGX, KES, GHS, ZAR</p>
         <p style="color: #5A6474;">Flat fee: 1.5% per swap. No hidden charges.</p>

@@ -17,6 +17,7 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
   SAME_CURRENCY: { status: 400, message: 'Cannot swap between the same currency' },
   UNSUPPORTED_PAIR: { status: 400, message: 'This currency pair is not supported' },
   PAYMENT_INIT_FAILED: { status: 502, message: 'Payment initiation failed. Please try again.' },
+  TRANSACTION_NOT_FOUND: { status: 404, message: 'Transaction not found' },
 };
 
 export function errorMiddleware(

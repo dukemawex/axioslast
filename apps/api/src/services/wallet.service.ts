@@ -169,7 +169,7 @@ export async function getTransaction(userId: string, transactionId: string) {
   });
 
   if (!transaction || transaction.userId !== userId) {
-    throw new Error('USER_NOT_FOUND');
+    throw new Error('TRANSACTION_NOT_FOUND');
   }
 
   return transaction;
