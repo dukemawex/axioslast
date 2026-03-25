@@ -26,8 +26,8 @@ const envSchema = z.object({
   FRONTEND_URL: z
     .string()
     .url()
-    .transform((value) => new URL(value).origin)
-    .default('http://localhost:3000'),
+    .default('http://localhost:3000')
+    .transform((value) => new URL(value).origin),
 });
 
 const result = envSchema.safeParse(process.env);
