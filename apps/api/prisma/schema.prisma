@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String      @id @default(cuid())
+  email            String      @unique
+  phone            String      @unique
+  passwordHash     String
+  firstName        String
+  lastName         String
+  nationality      String
+  kycStatus        KycStatus   @default(PENDING)
+  isEmailVerified  Boolean     @default(false)
+  isPhoneVerified  Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  wallets          Wallet[]
+  transactions     Transaction[]
+  sessions         Session[]
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String
+  currency  String
+  balance   Decimal  @default(0) @db.Decimal(18, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, currency])
+}
+
+model Transaction {
+  id           String            @id @default(cuid())
+  userId       String
+  type         TransactionType
+  status       TransactionStatus @default(PENDING)
+  fromCurrency String
+  toCurrency   String
+  fromAmount   Decimal           @db.Decimal(18, 2)
+  toAmount     Decimal           @db.Decimal(18, 2)
+  exchangeRate Decimal           @db.Decimal(18, 6)
+  fee          Decimal           @db.Decimal(18, 2)
+  reference    String?           @unique
+  narration    String?
+  metadata     Json?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  user         User              @relation(fields: [userId], references: [id])
+
+  @@index([userId, status])
+  @@index([reference])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model ExchangeRate {
+  id           String   @id @default(cuid())
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal  @db.Decimal(18, 6)
+  source       String   @default("seed")
+  fetchedAt    DateTime @default(now())
+
+  @@index([fromCurrency, toCurrency, fetchedAt])
+}
+
+enum KycStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum TransactionType {
+  DEPOSIT
+  SWAP
+  WITHDRAWAL
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REVERSED
+}
