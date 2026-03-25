@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM node:20-alpine AS builder
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ RUN npx prisma generate
 RUN npx tsc
 
 # Stage 2: Production
-FROM node:20-alpine AS runner
+FROM node:18-alpine AS runner
 
 WORKDIR /app
 
