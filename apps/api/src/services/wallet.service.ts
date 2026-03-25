@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { getRate } from './rates.service';
 import { initiatePayment } from './interswitch.service';
@@ -89,7 +90,7 @@ export async function swapCurrency(
 
   const txRef = `AXP-SWP-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.wallet.update({
       where: { userId_currency: { userId, currency: fromCurrency } },
       data: { balance: { decrement: decimalAmount.toNumber() } },
@@ -184,7 +185,7 @@ export async function completeDeposit(reference: string): Promise<void> {
     return;
   }
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.transaction.update({
       where: { reference },
       data: { status: 'COMPLETED' },
