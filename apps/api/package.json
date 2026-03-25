@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc",
+    "build": "DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/postgres} prisma generate && (if [ -n \"$DATABASE_URL\" ]; then prisma migrate deploy; else echo \"Skipping prisma migrate deploy: DATABASE_URL is not set\"; fi) && tsc",
     "type-check": "tsc --noEmit",
     "prestart": "prisma generate",
     "start": "node dist/index.js",
