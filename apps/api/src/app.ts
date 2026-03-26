@@ -10,6 +10,8 @@ import userRoutes from './routes/user.routes';
 import walletRoutes from './routes/wallet.routes';
 import ratesRoutes from './routes/rates.routes';
 import webhookRoutes from './routes/webhook.routes';
+import pinRoutes from './routes/pin.routes';
+import twoFactorRoutes from './routes/twoFactor.routes';
 
 const app = express();
 
@@ -40,6 +42,8 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/wallets', walletRoutes);
 app.use('/api/v1/rates', ratesRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
+app.use('/api/v1/pin', pinRoutes);
+app.use('/api/v1/2fa', twoFactorRoutes);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'NOT_FOUND', message: 'The requested resource was not found' });

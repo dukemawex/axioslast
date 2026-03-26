@@ -11,6 +11,12 @@ export interface User {
   kycStatus: string;
   isEmailVerified: boolean;
   isPhoneVerified: boolean;
+  isPinSet?: boolean;
+  isTwoFactorEnabled?: boolean;
+  isFrozen?: boolean;
+  dailySwapLimit?: string;
+  dailySwapUsed?: string;
+  dailyLimitResetAt?: string;
   createdAt?: string;
   wallets?: Array<{ id: string; currency: string; balance: string }>;
 }

@@ -4,6 +4,7 @@ import { prisma } from '../config/prisma';
 import { getRate } from './rates.service';
 import { initiatePayment } from './interswitch.service';
 import { env } from '../config/env';
+import { verifyPinToken } from './pin.service';
 
 const FEE_RATE = new Decimal('0.015'); // 1.5%
 
@@ -61,7 +62,8 @@ export async function swapCurrency(
   userId: string,
   fromCurrency: string,
   toCurrency: string,
-  fromAmount: number
+  fromAmount: number,
+  pinToken?: string
 ): Promise<{
   transaction: object;
   fromAmount: string;
@@ -73,6 +75,36 @@ export async function swapCurrency(
 
   const decimalAmount = new Decimal(fromAmount);
   if (decimalAmount.lte(0)) throw new Error('INVALID_AMOUNT');
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      dailySwapLimit: true,
+      dailySwapUsed: true,
+      dailyLimitResetAt: true,
+    },
+  });
+  if (!user) throw new Error('USER_NOT_FOUND');
+
+  await verifyPinToken(userId, pinToken);
+
+  let dailySwapUsed = new Decimal(user.dailySwapUsed.toString());
+  const now = new Date();
+  if (user.dailyLimitResetAt <= now) {
+    dailySwapUsed = new Decimal(0);
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        dailySwapUsed: 0,
+        dailyLimitResetAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      },
+    });
+  }
+
+  const dailySwapLimit = new Decimal(user.dailySwapLimit.toString());
+  if (dailySwapUsed.add(decimalAmount).gt(dailySwapLimit)) {
+    throw new Error('DAILY_LIMIT_EXCEEDED');
+  }
 
   const sourceWallet = await prisma.wallet.findUnique({
     where: { userId_currency: { userId, currency: fromCurrency } },
@@ -116,10 +148,15 @@ export async function swapCurrency(
         reference: txRef,
         narration: `Swap ${fromCurrency} → ${toCurrency}`,
       },
-    });
+      });
 
-    return transaction;
-  });
+      await tx.user.update({
+        where: { id: userId },
+        data: { dailySwapUsed: { increment: decimalAmount.toNumber() } },
+      });
+
+      return transaction;
+    });
 
   return {
     transaction: result,

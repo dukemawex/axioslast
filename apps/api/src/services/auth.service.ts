@@ -5,7 +5,8 @@ import { prisma } from '../config/prisma';
 import { redis } from '../config/redis';
 import { env } from '../config/env';
 import { generateOTP, storeOTP, verifyOTP } from './otp.service';
-import { sendEmailOTP, sendWelcomeEmail, sendPasswordResetOTP } from './email.service';
+import { sendEmailOTP, sendWelcomeEmail, sendPasswordResetOTP, sendLoginNotificationEmail } from './email.service';
+import * as twoFactorService from './twoFactor.service';
 import { sendPhoneOTP } from './sms.service';
 
 const NATIONALITY_CURRENCY_MAP: Record<string, string> = {
@@ -118,9 +119,11 @@ export interface LoginInput {
 }
 
 export async function login(input: LoginInput): Promise<{
-  accessToken: string;
-  refreshToken: string;
-  user: object;
+  accessToken?: string;
+  refreshToken?: string;
+  user?: object;
+  requires2FA?: boolean;
+  tempToken?: string;
 }> {
   const user = await prisma.user.findFirst({
     where: {
@@ -139,6 +142,14 @@ export async function login(input: LoginInput): Promise<{
 
   if (!user.isEmailVerified) throw new Error('EMAIL_NOT_VERIFIED');
 
+  if (user.isFrozen) throw new Error('ACCOUNT_FROZEN');
+
+  if (user.isTwoFactorEnabled) {
+    const tempToken = nanoid(48);
+    await redis.set(`2fa-login:${tempToken}`, user.id, 'EX', 300);
+    return { requires2FA: true, tempToken };
+  }
+
   const accessToken = signAccessToken(user.id);
   const refreshToken = nanoid(64);
 
@@ -155,7 +166,64 @@ export async function login(input: LoginInput): Promise<{
     },
   });
 
-  const { passwordHash: _, ...userWithoutHash } = user;
+  const { passwordHash: _, transactionPin: __, twoFactorSecret: ___, ...userWithoutHash } = user;
+
+  await sendLoginNotificationEmail(
+    user.email,
+    user.firstName,
+    input.ipAddress,
+    input.userAgent,
+    new Date()
+  );
+
+  return { accessToken, refreshToken, user: userWithoutHash };
+}
+
+export async function verify2FALogin(
+  tempToken: string,
+  token: string,
+  userAgent?: string,
+  ipAddress?: string
+): Promise<{ accessToken: string; refreshToken: string; user: object }> {
+  const userId = await redis.get(`2fa-login:${tempToken}`);
+  if (!userId) throw new Error('TWO_FACTOR_TEMP_TOKEN_INVALID');
+
+  const isValid = await twoFactorService.verifyToken(userId, token);
+  if (!isValid) throw new Error('TWO_FACTOR_INVALID');
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { wallets: true },
+  });
+  if (!user) throw new Error('USER_NOT_FOUND');
+
+  const accessToken = signAccessToken(user.id);
+  const refreshToken = nanoid(64);
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + env.JWT_REFRESH_EXPIRY_DAYS);
+
+  await prisma.session.create({
+    data: {
+      userId: user.id,
+      refreshToken,
+      userAgent,
+      ipAddress,
+      expiresAt,
+    },
+  });
+
+  await redis.del(`2fa-login:${tempToken}`);
+
+  const { passwordHash: _, transactionPin: __, twoFactorSecret: ___, ...userWithoutHash } = user;
+
+  await sendLoginNotificationEmail(
+    user.email,
+    user.firstName,
+    ipAddress,
+    userAgent,
+    new Date()
+  );
 
   return { accessToken, refreshToken, user: userWithoutHash };
 }

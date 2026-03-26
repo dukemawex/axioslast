@@ -31,6 +31,9 @@ const envSchema = z.object({
     .url()
     .default('http://localhost:3000')
     .transform((value) => new URL(value).origin),
+  ENCRYPTION_KEY: z.string().min(32).default(crypto.randomBytes(32).toString('hex')),
+  CRON_ENABLED: z.coerce.boolean().default(true),
+  ADMIN_EMAIL: z.string().email().default('admin@example.com'),
 });
 
 const result = envSchema.safeParse(process.env);
@@ -55,6 +58,8 @@ const defaultedKeys = [
   'INTERSWITCH_PAY_ITEM_ID',
   'INTERSWITCH_WEBHOOK_SECRET',
   'SMTP_PASS',
+  'ENCRYPTION_KEY',
+  'ADMIN_EMAIL',
 ] as const;
 
 const missingKeys = defaultedKeys.filter((key) => !process.env[key]);

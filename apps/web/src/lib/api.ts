@@ -118,20 +118,39 @@ export const api = {
     forgotPassword: (data: unknown) => apiClient.post('/auth/forgot-password', data),
     resetPassword: (data: unknown) => apiClient.post('/auth/reset-password', data),
     resendOTP: (data: unknown) => apiClient.post('/auth/resend-otp', data),
+    verify2FA: (data: unknown) => apiClient.post('/auth/2fa/verify', data),
   },
   users: {
     getMe: () => apiClient.get('/users/me'),
     updateMe: (data: unknown) => apiClient.patch('/users/me', data),
+    updateLimits: (data: unknown) => apiClient.patch('/users/limits', data),
+    freeze: (data: unknown) => apiClient.post('/users/freeze', data),
+    requestUnfreezeOtp: () => apiClient.post('/users/unfreeze/request-otp'),
+    unfreeze: (data: unknown) => apiClient.post('/users/unfreeze', data),
   },
   wallets: {
     getAll: () => apiClient.get('/wallets'),
     fund: (data: unknown) => apiClient.post('/wallets/fund', data),
-    swap: (data: unknown) => apiClient.post('/wallets/swap', data),
+    swap: (data: unknown, pinToken?: string) =>
+      apiClient.post('/wallets/swap', data, {
+        headers: pinToken ? { 'X-Pin-Token': pinToken } : undefined,
+      }),
     getTransactions: (params?: Record<string, unknown>) => apiClient.get('/wallets/transactions', { params }),
     getTransaction: (id: string) => apiClient.get(`/wallets/transactions/${id}`),
   },
   rates: {
     getAll: () => apiClient.get('/rates'),
     getRate: (from: string, to: string) => apiClient.get(`/rates/${from}/${to}`),
+  },
+  pin: {
+    set: (data: unknown) => apiClient.post('/pin/set', data),
+    verify: (data: unknown) => apiClient.post('/pin/verify', data),
+    change: (data: unknown) => apiClient.post('/pin/change', data),
+  },
+  twoFactor: {
+    setup: () => apiClient.post('/2fa/setup'),
+    enable: (data: unknown) => apiClient.post('/2fa/enable', data),
+    verify: (data: unknown) => apiClient.post('/2fa/verify', data),
+    disable: (data: unknown) => apiClient.post('/2fa/disable', data),
   },
 };

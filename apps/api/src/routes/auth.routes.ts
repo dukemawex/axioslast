@@ -19,5 +19,6 @@ router.post('/logout', authController.logout);
 router.post('/forgot-password', authLimiter, authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
 router.post('/resend-otp', authLimiter, authController.resendOTP);
+router.post('/2fa/verify', authLimiter, authController.verify2FALogin);
 
 export default router;

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { requireAuth } from '../middleware/auth.middleware';
+import { requireAuth, requireAuthAllowFrozen } from '../middleware/auth.middleware';
 import * as userController from '../controllers/user.controller';
 
 const router = Router();
@@ -12,8 +12,13 @@ const apiLimiter = rateLimit({
 });
 
 router.use(apiLimiter);
+router.post('/unfreeze', requireAuthAllowFrozen, userController.unfreezeAccount);
+router.post('/unfreeze/request-otp', requireAuthAllowFrozen, userController.requestUnfreezeOtp);
+
 router.use(requireAuth);
 router.get('/me', userController.getMe);
 router.patch('/me', userController.updateMe);
+router.patch('/limits', userController.updateDailyLimit);
+router.post('/freeze', userController.freezeAccount);
 
 export default router;

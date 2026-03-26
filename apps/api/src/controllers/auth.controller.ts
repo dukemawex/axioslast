@@ -45,6 +45,11 @@ const resendOTPSchema = z.object({
   userId: z.string().min(1),
 });
 
+const verify2FASchema = z.object({
+  tempToken: z.string().min(1),
+  token: z.string().length(6),
+});
+
 export async function register(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const data = registerSchema.parse(req.body);
@@ -167,6 +172,25 @@ export async function resendOTP(req: Request, res: Response, next: NextFunction)
     const { userId } = resendOTPSchema.parse(req.body);
     await authService.resendOTP(userId);
     res.json({ message: 'Verification code resent.' });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'VALIDATION_ERROR', details: err.errors });
+      return;
+    }
+    next(err);
+  }
+}
+
+export async function verify2FALogin(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const data = verify2FASchema.parse(req.body);
+    const result = await authService.verify2FALogin(
+      data.tempToken,
+      data.token,
+      req.headers['user-agent'],
+      req.ip
+    );
+    res.json(result);
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'VALIDATION_ERROR', details: err.errors });

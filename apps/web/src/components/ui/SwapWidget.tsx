@@ -5,6 +5,7 @@ import Decimal from 'decimal.js';
 import { api } from '@/lib/api';
 import { CURRENCY_META, CurrencyCode, getCurrencyDisplay } from '@/lib/currencies';
 import { Button } from './Button';
+import { PINVerifyModal } from '@/components/PINVerifyModal';
 
 const CURRENCIES = Object.keys(CURRENCY_META) as CurrencyCode[];
 
@@ -20,6 +21,8 @@ export function SwapWidget({ onSwap, compact }: SwapWidgetProps) {
   const [rate, setRate] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [swapping, setSwapping] = useState(false);
+  const [pinModalOpen, setPinModalOpen] = useState(false);
+  const [pendingSwap, setPendingSwap] = useState(false);
 
   const fee = fromAmount ? new Decimal(fromAmount || 0).mul('0.015').toFixed(2) : '0.00';
   const net = fromAmount ? new Decimal(fromAmount || 0).minus(fee).toFixed(2) : '0.00';
@@ -34,7 +37,7 @@ export function SwapWidget({ onSwap, compact }: SwapWidgetProps) {
       .finally(() => setLoading(false));
   }, [fromCurrency, toCurrency]);
 
-  async function handleSwap() {
+  async function executeSwap(pinToken: string) {
     if (!fromAmount || !rate) return;
     setSwapping(true);
     try {
@@ -42,11 +45,19 @@ export function SwapWidget({ onSwap, compact }: SwapWidgetProps) {
         fromCurrency,
         toCurrency,
         fromAmount: parseFloat(fromAmount),
-      });
+      }, pinToken);
       onSwap?.(result.data);
     } finally {
       setSwapping(false);
+      setPendingSwap(false);
+      setPinModalOpen(false);
     }
+  }
+
+  async function handleSwap() {
+    if (!fromAmount || !rate) return;
+    setPendingSwap(true);
+    setPinModalOpen(true);
   }
 
   function flip() {
@@ -127,6 +138,21 @@ export function SwapWidget({ onSwap, compact }: SwapWidgetProps) {
       >
         Swap Now
       </Button>
+
+      <PINVerifyModal
+        open={pinModalOpen}
+        onClose={() => {
+          if (!swapping) {
+            setPinModalOpen(false);
+            setPendingSwap(false);
+          }
+        }}
+        onVerified={(pinToken) => {
+          if (pendingSwap) {
+            executeSwap(pinToken);
+          }
+        }}
+      />
     </div>
   );
 }

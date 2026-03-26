@@ -2,7 +2,8 @@
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, ArrowLeftRight, Wallet, CreditCard, User, LogOut } from 'lucide-react';
+import { LayoutDashboard, ArrowLeftRight, Wallet, CreditCard, User, LogOut, Bell, ShieldCheck, Plane, Gift, Lock, Building2 } from 'lucide-react';
+import { PINSetupModal } from '@/components/PINSetupModal';
 import { useAuthStore } from '@/store/authStore';
 import { api } from '@/lib/api';
 
@@ -11,7 +12,20 @@ const NAV_ITEMS = [
   { href: '/swap', icon: ArrowLeftRight, label: 'Swap' },
   { href: '/wallet', icon: Wallet, label: 'Wallet' },
   { href: '/deposit', icon: CreditCard, label: 'Deposit' },
+  { href: '/rate-lock', icon: Lock, label: 'Lock Rate' },
+  { href: '/alerts', icon: Bell, label: 'Rate Alerts' },
+  { href: '/travel', icon: Plane, label: 'Travel History' },
+  { href: '/referrals', icon: Gift, label: 'Referrals' },
+  { href: '/cards', icon: CreditCard, label: 'Virtual Card' },
+  { href: '/agent', icon: ShieldCheck, label: 'Agent Portal' },
+  { href: '/notifications', icon: Bell, label: 'Notifications' },
   { href: '/profile', icon: User, label: 'Profile' },
+  { href: '/profile/kyc', icon: ShieldCheck, label: 'KYC Verification' },
+  { href: '/profile/2fa', icon: ShieldCheck, label: 'Two-Factor Auth' },
+  { href: '/profile', icon: Lock, label: 'Transaction PIN' },
+  { href: '/profile', icon: Wallet, label: 'Spending Limits' },
+  { href: '/profile', icon: User, label: 'Freeze Account' },
+  { href: '/business', icon: Building2, label: 'Business Account' },
 ];
 
 const NATIONALITY_FLAGS: Record<string, string> = {
@@ -93,6 +107,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main content */}
       <main className="flex-1 md:ml-60 p-6 pb-24 md:pb-6">
         {children}
+        <PINSetupModal open={!user?.isPinSet} />
       </main>
     </div>
   );

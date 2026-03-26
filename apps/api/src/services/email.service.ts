@@ -71,3 +71,33 @@ export async function sendPasswordResetOTP(to: string, firstName: string, otp: s
     `,
   });
 }
+
+export async function sendLoginNotificationEmail(
+  to: string,
+  firstName: string,
+  ipAddress: string | undefined,
+  userAgent: string | undefined,
+  loginAt: Date
+): Promise<void> {
+  await transporter.sendMail({
+    from: `"Axios Pay" <${env.SMTP_USER}>`,
+    to,
+    subject: 'New login detected on your Axios Pay account',
+    html: `
+      <div style="font-family: DM Sans, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+        <h1 style="color: #1A2332; font-family: Playfair Display, serif;">Axios Pay</h1>
+        <h2 style="color: #1A2332;">Hi ${firstName}, a new login was detected</h2>
+        <p style="color: #5A6474;">We noticed a successful login to your account.</p>
+        <div style="background: #FDF3E3; border: 1px solid #E5E1DA; border-radius: 12px; padding: 16px; margin: 24px 0;">
+          <p style="margin: 0 0 8px; color: #1A2332;"><strong>Time:</strong> ${loginAt.toISOString()}</p>
+          <p style="margin: 0 0 8px; color: #1A2332;"><strong>IP address:</strong> ${ipAddress || 'Unknown'}</p>
+          <p style="margin: 0; color: #1A2332;"><strong>Device/Browser:</strong> ${userAgent || 'Unknown'}</p>
+        </div>
+        <div style="background: #C8772A; border-radius: 8px; padding: 16px 24px; display: inline-block; margin: 8px 0 24px;">
+          <a href="${env.FRONTEND_URL}" style="color: white; text-decoration: none; font-weight: bold;">Not you? Secure your account immediately</a>
+        </div>
+        <p style="color: #9AA3AE; font-size: 12px; margin-top: 20px;">Axios Pay — Cross-Border FX, Unlocked.</p>
+      </div>
+    `,
+  });
+}

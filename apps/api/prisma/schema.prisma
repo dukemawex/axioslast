@@ -12,6 +12,14 @@ model User {
   email            String      @unique
   phone            String      @unique
   passwordHash     String
+  transactionPin   String?
+  isPinSet         Boolean     @default(false)
+  twoFactorSecret  String?
+  isTwoFactorEnabled Boolean   @default(false)
+  isFrozen         Boolean     @default(false)
+  dailySwapLimit   Decimal     @default(1000000) @db.Decimal(18, 2)
+  dailySwapUsed    Decimal     @default(0) @db.Decimal(18, 2)
+  dailyLimitResetAt DateTime   @default(now())
   firstName        String
   lastName         String
   nationality      String

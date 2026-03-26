@@ -65,7 +65,8 @@ export async function swapCurrency(req: AuthRequest, res: Response, next: NextFu
       req.userId!,
       data.fromCurrency,
       data.toCurrency,
-      data.fromAmount
+      data.fromAmount,
+      req.header('X-Pin-Token') || undefined
     );
     res.json(result);
   } catch (err) {

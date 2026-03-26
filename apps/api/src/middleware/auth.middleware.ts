@@ -1,12 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
+import { prisma } from '../config/prisma';
 
 export interface AuthRequest extends Request {
   userId?: string;
 }
 
-export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
+async function authenticate(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+  options?: { allowFrozen?: boolean }
+): Promise<void> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     res.status(401).json({ error: 'TOKEN_MISSING', message: 'Authentication required' });
@@ -26,6 +32,21 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
       return;
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.sub },
+      select: { isFrozen: true },
+    });
+
+    if (!user) {
+      res.status(401).json({ error: 'TOKEN_INVALID', message: 'Invalid token' });
+      return;
+    }
+
+    if (user.isFrozen && !options?.allowFrozen) {
+      res.status(403).json({ error: 'ACCOUNT_FROZEN', message: 'Account is frozen' });
+      return;
+    }
+
     req.userId = decoded.sub;
     next();
   } catch (err) {
@@ -35,4 +56,16 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
       res.status(401).json({ error: 'TOKEN_INVALID', message: 'Invalid token' });
     }
   }
+}
+
+export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  await authenticate(req, res, next);
+}
+
+export async function requireAuthAllowFrozen(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  await authenticate(req, res, next, { allowFrozen: true });
 }

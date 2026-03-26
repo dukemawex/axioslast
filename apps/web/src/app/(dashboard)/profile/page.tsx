@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { PINInput } from '@/components/ui/PINInput';
 
 const KYC_DESCRIPTIONS: Record<string, string> = {
   PENDING: 'Identity verification not yet started.',
@@ -31,6 +32,11 @@ export default function ProfilePage() {
   const { user, updateUser, clearAuth } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [pinState, setPinState] = useState({ currentPin: '', newPin: '' });
+  const [limit, setLimit] = useState(user?.dailySwapLimit || '1000000');
+  const [freezePin, setFreezePin] = useState('');
+  const [unfreezeOtp, setUnfreezeOtp] = useState('');
+  const [message, setMessage] = useState('');
   const router = useRouter();
 
   const { register, handleSubmit, formState: { errors } } = useForm({
@@ -48,6 +54,35 @@ export default function ProfilePage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleChangePin() {
+    await api.pin.change(pinState);
+    setPinState({ currentPin: '', newPin: '' });
+    setMessage('PIN changed successfully.');
+  }
+
+  async function handleUpdateLimit() {
+    const result = await api.users.updateLimits({ dailySwapLimit: Number(limit) });
+    updateUser(result.data);
+    setMessage('Daily limit updated.');
+  }
+
+  async function handleFreeze() {
+    await api.users.freeze({ pin: freezePin });
+    clearAuth();
+    router.push('/login?message=Your account has been frozen. Contact support to unfreeze.');
+  }
+
+  async function handleRequestUnfreezeOtp() {
+    await api.users.requestUnfreezeOtp();
+    setMessage('Unfreeze OTP sent to your email.');
+  }
+
+  async function handleUnfreeze() {
+    await api.users.unfreeze({ otp: unfreezeOtp });
+    updateUser({ isFrozen: false });
+    setMessage('Account unfrozen.');
   }
 
   async function handleLogout() {
@@ -106,6 +141,66 @@ export default function ProfilePage() {
           <Button type="submit" loading={loading}>Save Changes</Button>
         </form>
       </Card>
+
+      <Card>
+        <h2 className="font-semibold text-text-primary mb-4">Transaction PIN</h2>
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm text-text-secondary mb-2">Current PIN</p>
+            <PINInput value={pinState.currentPin} onChange={(v) => setPinState((s) => ({ ...s, currentPin: v }))} />
+          </div>
+          <div>
+            <p className="text-sm text-text-secondary mb-2">New PIN</p>
+            <PINInput value={pinState.newPin} onChange={(v) => setPinState((s) => ({ ...s, newPin: v }))} />
+          </div>
+          <Button onClick={handleChangePin} disabled={pinState.currentPin.length !== 4 || pinState.newPin.length !== 4}>
+            Change PIN
+          </Button>
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="font-semibold text-text-primary mb-4">Spending Limits</h2>
+        <div className="space-y-3">
+          <div className="text-sm text-text-secondary">
+            Used today: {user?.dailySwapUsed || '0'} / {user?.dailySwapLimit || '1000000'}
+          </div>
+          <Input
+            label="Daily swap limit"
+            value={limit}
+            onChange={(e) => setLimit(e.target.value)}
+          />
+          <Button onClick={handleUpdateLimit}>Update Limit</Button>
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="font-semibold text-error mb-4">Freeze Account</h2>
+        <p className="text-sm text-text-secondary mb-3">
+          Freezing your account logs you out and blocks all protected actions until unfreezing with email OTP.
+        </p>
+        {!user?.isFrozen ? (
+          <div className="space-y-3">
+            <p className="text-sm text-text-secondary">Enter transaction PIN to freeze:</p>
+            <PINInput value={freezePin} onChange={setFreezePin} />
+            <Button variant="danger" onClick={handleFreeze} disabled={freezePin.length !== 4}>
+              Freeze Account
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <Button onClick={handleRequestUnfreezeOtp}>Send Unfreeze OTP</Button>
+            <Input label="Email OTP" value={unfreezeOtp} onChange={(e) => setUnfreezeOtp(e.target.value)} />
+            <Button onClick={handleUnfreeze} disabled={unfreezeOtp.length !== 6}>Unfreeze Account</Button>
+          </div>
+        )}
+      </Card>
+
+      {message && (
+        <Card>
+          <div className="text-sm text-success">{message}</div>
+        </Card>
+      )}
 
       {/* Logout */}
       <Card>
