@@ -18,7 +18,10 @@ export const PHONE_COUNTRY_OPTIONS: Array<{ nationality: NationalityCode; flag: 
 ];
 
 export const NATIONALITY_TO_DIAL_CODE: Record<NationalityCode, string> = PHONE_COUNTRY_OPTIONS.reduce(
-  (acc, option) => ({ ...acc, [option.nationality]: option.dialCode }),
+  (acc, option) => {
+    acc[option.nationality] = option.dialCode;
+    return acc;
+  },
   {} as Record<NationalityCode, string>
 );
 

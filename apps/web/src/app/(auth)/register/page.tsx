@@ -49,6 +49,10 @@ export default function RegisterPage() {
   async function onStep2(data: Step2) {
     if (!step1Data) return;
     const localPhone = data.localPhone.replace(/\D/g, '').replace(/^0+/, '');
+    if (!localPhone) {
+      form2.setError('localPhone', { type: 'manual', message: 'Enter a valid local phone number' });
+      return;
+    }
     const phone = `${data.countryCode}${localPhone}`;
     setLoading(true);
     setError('');
