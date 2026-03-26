@@ -1,15 +1,22 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { requireAuth, type AuthRequest } from '../middleware/auth.middleware';
 import * as twoFactorService from '../services/twoFactor.service';
 
 const router = Router();
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: { error: 'RATE_LIMIT', message: 'Too many requests. Try again later.' },
+});
 
 const tokenSchema = z.object({
   token: z.string().length(6),
 });
 
+router.use(apiLimiter);
 router.use(requireAuth);
 
 router.post('/setup', async (req: AuthRequest, res, next) => {

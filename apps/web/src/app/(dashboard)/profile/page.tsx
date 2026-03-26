@@ -63,7 +63,13 @@ export default function ProfilePage() {
   }
 
   async function handleUpdateLimit() {
-    const result = await api.users.updateLimits({ dailySwapLimit: Number(limit) });
+    const parsedLimit = Number.parseFloat(limit);
+    if (!Number.isFinite(parsedLimit) || parsedLimit <= 0) {
+      setMessage('Enter a valid positive daily limit.');
+      return;
+    }
+
+    const result = await api.users.updateLimits({ dailySwapLimit: parsedLimit });
     updateUser(result.data);
     setMessage('Daily limit updated.');
   }

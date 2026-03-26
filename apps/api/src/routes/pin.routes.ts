@@ -1,9 +1,15 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth, type AuthRequest } from '../middleware/auth.middleware';
 import * as pinService from '../services/pin.service';
 
 const router = Router();
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: { error: 'RATE_LIMIT', message: 'Too many requests. Try again later.' },
+});
 
 const setPinSchema = z.object({
   pin: z.string().length(4),
@@ -18,6 +24,7 @@ const changePinSchema = z.object({
   newPin: z.string().length(4),
 });
 
+router.use(apiLimiter);
 router.use(requireAuth);
 
 router.post('/set', async (req: AuthRequest, res, next) => {

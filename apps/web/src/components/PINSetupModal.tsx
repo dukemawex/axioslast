@@ -11,6 +11,7 @@ interface PINSetupModalProps {
 }
 
 export function PINSetupModal({ open }: PINSetupModalProps) {
+  const noop = () => undefined;
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,7 +39,7 @@ export function PINSetupModal({ open }: PINSetupModalProps) {
   }
 
   return (
-    <Modal open={open} onClose={() => undefined} title="Set Transaction PIN" hideCloseButton closeOnOverlayClick={false}>
+    <Modal open={open} onClose={noop} title="Set Transaction PIN" hideCloseButton closeOnOverlayClick={false}>
       <div className="space-y-4">
         <p className="text-sm text-text-secondary">
           You must set your 4-digit transaction PIN before continuing.
