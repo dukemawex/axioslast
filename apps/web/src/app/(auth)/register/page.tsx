@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -39,15 +39,25 @@ export default function RegisterPage() {
     resolver: zodResolver(step2Schema),
     defaultValues: { countryCode: '+234', localPhone: '' },
   });
+  const passwordValue = form2.watch('password', '');
+  const passwordChecks = useMemo(
+    () => [
+      { label: 'At least 8 characters', met: passwordValue.length >= 8 },
+      { label: 'One uppercase letter', met: /[A-Z]/.test(passwordValue) },
+      { label: 'One number', met: /\d/.test(passwordValue) },
+    ],
+    [passwordValue]
+  );
 
   async function onStep1(data: Step1) {
+    setError('');
     setStep1Data(data);
     form2.setValue('countryCode', NATIONALITY_TO_DIAL_CODE[data.nationality]);
     setStep(2);
   }
 
   async function onStep2(data: Step2) {
-    if (!step1Data) return;
+    if (!step1Data || loading) return;
     const localPhone = data.localPhone.replace(/\D/g, '').replace(/^0+/, '');
     if (!localPhone) {
       form2.setError('localPhone', { type: 'manual', message: 'Enter a valid local phone number' });
@@ -63,15 +73,28 @@ export default function RegisterPage() {
         password: data.password,
       });
       localStorage.setItem('axiospay_pending_userId', result.data.userId);
-      router.push('/verify-email');
+      router.replace('/verify-email');
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { error?: string } } };
-      const code = e?.response?.data?.error;
+      const e = err as { response?: { data?: { error?: string; details?: Array<{ path?: string[]; message?: string }> } } };
+      const code = e?.response?.data?.error || '';
+      if (code === 'VALIDATION_ERROR') {
+        const details = e?.response?.data?.details || [];
+        details.forEach((detail) => {
+          const field = detail.path?.[0];
+          if (!field || !detail.message) return;
+          if (field in step1Schema.shape) {
+            form1.setError(field as keyof Step1, { type: 'server', message: detail.message });
+          } else if (field in step2Schema.shape) {
+            form2.setError(field as keyof Step2, { type: 'server', message: detail.message });
+          }
+        });
+        return;
+      }
       const messages: Record<string, string> = {
-        EMAIL_EXISTS: 'An account with this email already exists.',
-        PHONE_EXISTS: 'An account with this phone number already exists.',
+        EMAIL_EXISTS: 'This email is already registered. Try logging in instead.',
+        PHONE_EXISTS: 'This phone number is already registered.',
       };
-      setError(messages[code || ''] || 'Registration failed. Please try again.');
+      setError(messages[code] || 'Registration failed. Please check your details and try again.');
     } finally {
       setLoading(false);
     }
@@ -151,8 +174,14 @@ export default function RegisterPage() {
             )}
           </div>
           <Input label="Password" type="password" {...form2.register('password')} error={form2.formState.errors.password?.message} />
-          <p className="text-xs text-text-muted">Must be at least 8 characters.</p>
-          <Button type="submit" loading={loading} className="w-full">Create Account</Button>
+          <ul className="space-y-1 text-xs">
+            {passwordChecks.map((check) => (
+              <li key={check.label} className={check.met ? 'text-success' : 'text-error'}>
+                {check.met ? '✅' : '❌'} {check.label}
+              </li>
+            ))}
+          </ul>
+          <Button type="submit" loading={loading} disabled={loading} className="w-full">Create Account</Button>
           <Button type="button" variant="ghost" className="w-full" onClick={() => setStep(1)}>Back</Button>
         </form>
       )}
