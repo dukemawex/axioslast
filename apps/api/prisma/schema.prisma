@@ -24,6 +24,14 @@ model User {
   lastName         String
   nationality      String
   kycStatus        KycStatus   @default(PENDING)
+  kycTier          KYCTier     @default(NONE)
+  kycVerifiedAt    DateTime?
+  kycRejectionReason String?
+  bvnHash          String?     @unique
+  ninHash          String?
+  nationalIdHash   String?
+  idType           String?
+  idCountry        String?
   ninNumber        String?
   nationalIdNumber String?
   idVerificationStatus IdVerificationStatus @default(NOT_SUBMITTED)
@@ -31,6 +39,8 @@ model User {
   idVerificationRef String?
   idVerifiedAt     DateTime?
   idVerificationFailureReason String?
+  monthlySwapLimit Decimal     @default(200000) @db.Decimal(18, 2)
+  monthlySwapUsed  Decimal     @default(0) @db.Decimal(18, 2)
   isEmailVerified  Boolean     @default(false)
   isPhoneVerified  Boolean     @default(false)
   cardToken        String?
@@ -125,6 +135,13 @@ enum KycStatus {
   SUBMITTED
   APPROVED
   REJECTED
+}
+
+enum KYCTier {
+  NONE
+  BASIC
+  STANDARD
+  PREMIUM
 }
 
 enum IdVerificationStatus {

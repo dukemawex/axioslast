@@ -35,11 +35,11 @@ export async function fundWallet(
   userId: string,
   amount: number,
   userEmail: string
-): Promise<{ paymentUrl: string; reference: string }> {
+): Promise<{ reference: string; amountInKobo: number }> {
   const decimalAmount = new Decimal(amount);
   if (decimalAmount.lt(100)) throw new Error('INVALID_AMOUNT');
 
-  const { paymentUrl, reference } = await initiatePayment({
+  const { reference, amountInKobo } = await initiatePayment({
     amount,
     userId,
     userEmail,
@@ -62,7 +62,7 @@ export async function fundWallet(
     },
   });
 
-  return { paymentUrl, reference };
+  return { reference, amountInKobo };
 }
 
 export async function swapCurrency(
@@ -89,6 +89,8 @@ export async function swapCurrency(
       dailySwapLimit: true,
       dailySwapUsed: true,
       dailyLimitResetAt: true,
+      monthlySwapLimit: true,
+      monthlySwapUsed: true,
     },
   });
   if (!user) throw new Error('USER_NOT_FOUND');
@@ -111,6 +113,12 @@ export async function swapCurrency(
   const dailySwapLimit = new Decimal(user.dailySwapLimit.toString());
   if (dailySwapUsed.add(decimalAmount).gt(dailySwapLimit)) {
     throw new Error('DAILY_LIMIT_EXCEEDED');
+  }
+
+  const monthlySwapLimit = new Decimal((user.monthlySwapLimit ?? 200000).toString());
+  const monthlySwapUsed = new Decimal((user.monthlySwapUsed ?? 0).toString());
+  if (monthlySwapUsed.add(decimalAmount).gt(monthlySwapLimit)) {
+    throw new Error('MONTHLY_LIMIT_EXCEEDED');
   }
 
   const sourceWallet = await prisma.wallet.findUnique({
@@ -159,7 +167,10 @@ export async function swapCurrency(
 
       await tx.user.update({
         where: { id: userId },
-        data: { dailySwapUsed: { increment: decimalAmount.toNumber() } },
+        data: {
+          dailySwapUsed: { increment: decimalAmount.toNumber() },
+          monthlySwapUsed: { increment: decimalAmount.toNumber() },
+        },
       });
 
       return transaction;

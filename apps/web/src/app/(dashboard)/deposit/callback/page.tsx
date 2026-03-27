@@ -57,7 +57,7 @@ function CallbackContent() {
   }, [verifyTransaction]);
 
   useEffect(() => {
-    if (status !== 'PENDING' || attempts >= 3 || !txnRef) {
+    if (status !== 'PENDING' || attempts >= 5 || !txnRef) {
       return;
     }
 
@@ -104,8 +104,10 @@ function CallbackContent() {
 
     return {
       icon: loading ? <Loader2 className="w-12 h-12 text-brand-amber animate-spin" /> : <Loader2 className="w-12 h-12 text-brand-amber" />,
-      title: 'Payment processing...',
-      description: 'We are confirming your transaction with Interswitch.',
+      title: attempts >= 5 ? 'Payment still processing' : 'Payment processing...',
+      description: attempts >= 5
+        ? `Your payment is still being confirmed. Please contact support with reference: ${txnRef}`
+        : 'We are confirming your transaction with Interswitch.',
       cardClass: 'border-amber-200 bg-amber-50',
     };
   }, [amount, error, loading, status]);

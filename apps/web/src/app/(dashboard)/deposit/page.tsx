@@ -22,6 +22,7 @@ declare global {
     webpayCheckout?: (config: {
       merchant_code: string;
       pay_item_id: string;
+      pay_item_name?: string;
       txn_ref: string;
       site_redirect_url: string;
       amount: number;
@@ -29,6 +30,7 @@ declare global {
       cust_name: string;
       cust_email: string;
       cust_id: string;
+      cust_phone_number?: string;
       mode: string;
       onComplete: (response: { resp?: string }) => void;
     }) => void;
@@ -74,16 +76,17 @@ export default function DepositPage() {
   const fee = useMemo(() => (amount > 0 ? amount * 0.015 : 0), [amount]);
   const total = useMemo(() => amount + fee, [amount, fee]);
 
-  const virtualAccountNumber = '1022334455';
-  const virtualBankName = 'Interswitch Virtual Bank';
-  const merchantCode = process.env.NEXT_PUBLIC_INTERSWITCH_MERCHANT_CODE || 'MERCHANT_CODE';
-
-  const interswitchMode = process.env.NEXT_PUBLIC_INTERSWITCH_MODE || 'TEST';
+  const merchantCode = process.env.NEXT_PUBLIC_INTERSWITCH_MERCHANT_CODE || '';
+  const payItemId = process.env.NEXT_PUBLIC_INTERSWITCH_PAY_ITEM_ID || '';
+  const interswitchMode = process.env.NEXT_PUBLIC_INTERSWITCH_ENV || 'TEST';
   const inlineScriptUrl =
-    process.env.NEXT_PUBLIC_INTERSWITCH_INLINE_SCRIPT_URL ||
+    process.env.NEXT_PUBLIC_INLINE_CHECKOUT_URL ||
     (interswitchMode.toUpperCase() === 'LIVE'
       ? 'https://newwebpay.interswitchng.com/inline-checkout.js'
       : 'https://newwebpay.qa.interswitchng.com/inline-checkout.js');
+
+  const virtualAccountNumber = '1022334455';
+  const virtualBankName = 'Interswitch Virtual Bank';
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -125,12 +128,12 @@ export default function DepositPage() {
     window.setTimeout(() => setCopyMessage(''), 2000);
   }
 
-  async function initiateDeposit(amountToPay: number): Promise<{ paymentUrl: string; reference: string }> {
+  async function initiateDeposit(amountToPay: number): Promise<{ reference: string; amountInKobo: number }> {
     const result = await api.wallets.initiateDeposit({ amount: amountToPay });
-    const paymentUrl = result.data?.paymentUrl as string | undefined;
     const reference = result.data?.reference as string | undefined;
-    if (!paymentUrl || !reference) throw new Error('Payment link unavailable. Please try again.');
-    return { paymentUrl, reference };
+    const amountInKobo = result.data?.amountInKobo as number | undefined;
+    if (!reference) throw new Error('Payment initiation failed. Please try again.');
+    return { reference, amountInKobo: amountInKobo ?? Math.round(amountToPay * 100) };
   }
 
   async function verifyInlineDeposit(reference: string) {
@@ -151,26 +154,31 @@ export default function DepositPage() {
     setError('');
     setInlineMessage('');
     try {
-      const { reference } = await initiateDeposit(data.amount);
+      const { reference, amountInKobo } = await initiateDeposit(data.amount);
       if (!window.webpayCheckout) {
         setError('Inline checkout is unavailable. Please refresh and try again.');
         return;
       }
 
       window.webpayCheckout({
-        merchant_code: process.env.NEXT_PUBLIC_INTERSWITCH_MERCHANT_CODE || '',
-        pay_item_id: process.env.NEXT_PUBLIC_INTERSWITCH_PAY_ITEM_ID || '',
+        merchant_code: merchantCode,
+        pay_item_id: payItemId,
+        pay_item_name: 'Axios Pay Wallet Deposit',
         txn_ref: reference,
-        site_redirect_url: `${window.location.origin}/dashboard/deposit/callback`,
-        amount: Math.round(data.amount * 100),
+        site_redirect_url: `${window.location.origin}/deposit/callback`,
+        amount: amountInKobo,
         currency: 566,
         cust_name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
         cust_email: user?.email || '',
         cust_id: user?.id || '',
+        cust_phone_number: user?.phone || '',
         mode: interswitchMode,
         onComplete: (response: { resp?: string }) => {
-          if (response.resp === '00') verifyInlineDeposit(reference);
-          else setInlineMessage('Payment was not completed. Please try again.');
+          if (response.resp === '00') {
+            verifyInlineDeposit(reference);
+          } else {
+            setInlineMessage('Payment was not completed. Please try again.');
+          }
         },
       });
     } catch (err: unknown) {
