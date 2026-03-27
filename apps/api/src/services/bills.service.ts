@@ -17,8 +17,8 @@ export async function rechargeAirtime(
   pinToken?: string
 ) {
   const normalizedNetwork = network.toUpperCase();
-  if (!NETWORK_CODES[normalizedNetwork]) throw new Error('INVALID_AMOUNT');
-  if (!/^\d{10,15}$/.test(phoneNumber)) throw new Error('INVALID_AMOUNT');
+  if (!NETWORK_CODES[normalizedNetwork]) throw new Error('INVALID_NETWORK');
+  if (!/^\d{10,15}$/.test(phoneNumber)) throw new Error('INVALID_PHONE_NUMBER');
 
   const amount = new Decimal(amountValue);
   if (amount.lt(50) || amount.gt(50000)) throw new Error('INVALID_AMOUNT');
@@ -95,7 +95,7 @@ export async function getBillers(categoryId: string) {
 }
 
 export async function validateCustomer(billerId: string, customerId: string) {
-  if (!billerId || !customerId) throw new Error('INVALID_AMOUNT');
+  if (!billerId || !customerId) throw new Error('INVALID_PARAMETERS');
   return { customerName: `Validated ${customerId}` };
 }
 

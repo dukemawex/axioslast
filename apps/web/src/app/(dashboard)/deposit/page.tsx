@@ -29,7 +29,7 @@ declare global {
       cust_name: string;
       cust_email: string;
       cust_id: string;
-      mode: 'TEST' | 'LIVE';
+      mode: string;
       onComplete: (response: { resp?: string }) => void;
     }) => void;
   }
@@ -78,15 +78,22 @@ export default function DepositPage() {
   const virtualBankName = 'Interswitch Virtual Bank';
   const merchantCode = process.env.NEXT_PUBLIC_INTERSWITCH_MERCHANT_CODE || 'MERCHANT_CODE';
 
+  const interswitchMode = process.env.NEXT_PUBLIC_INTERSWITCH_MODE || 'TEST';
+  const inlineScriptUrl =
+    process.env.NEXT_PUBLIC_INTERSWITCH_INLINE_SCRIPT_URL ||
+    (interswitchMode.toUpperCase() === 'LIVE'
+      ? 'https://newwebpay.interswitchng.com/inline-checkout.js'
+      : 'https://newwebpay.qa.interswitchng.com/inline-checkout.js');
+
   useEffect(() => {
     const script = document.createElement('script');
-    script.src = 'https://newwebpay.qa.interswitchng.com/inline-checkout.js';
+    script.src = inlineScriptUrl;
     script.async = true;
     document.body.appendChild(script);
     return () => {
       document.body.removeChild(script);
     };
-  }, []);
+  }, [inlineScriptUrl]);
 
   useEffect(() => {
     if (tab !== 'bank') return;
@@ -160,7 +167,7 @@ export default function DepositPage() {
         cust_name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
         cust_email: user?.email || '',
         cust_id: user?.id || '',
-        mode: 'TEST',
+        mode: interswitchMode,
         onComplete: (response: { resp?: string }) => {
           if (response.resp === '00') verifyInlineDeposit(reference);
           else setInlineMessage('Payment was not completed. Please try again.');

@@ -147,7 +147,7 @@ export const api = {
     deactivatePaymentLink: (id: string) => apiClient.delete(`/wallets/payment-links/${id}`),
     getBanks: () => apiClient.get('/wallets/transfers/banks'),
     resolveBankAccount: (data: unknown) => apiClient.post('/wallets/transfers/resolve', data),
-    sendTransfer: (data: unknown, pinToken?: string) =>
+    sendTransfer: (data: TransferRequest, pinToken?: string) =>
       apiClient.post('/wallets/transfers/send', data, {
         headers: pinToken ? { 'X-Pin-Token': pinToken } : undefined,
       }),
@@ -185,3 +185,11 @@ export const api = {
       }),
   },
 };
+
+interface TransferRequest {
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  amount: number;
+  narration?: string;
+}

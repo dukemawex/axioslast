@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import Decimal from 'decimal.js';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma';
@@ -486,7 +487,7 @@ export async function listBanksCached() {
 }
 
 export async function resolveBankAccount(bankCode: string, accountNumber: string) {
-  if (!/^\d{10}$/.test(accountNumber)) throw new Error('INVALID_AMOUNT');
+  if (!/^\d{10}$/.test(accountNumber)) throw new Error('INVALID_ACCOUNT_NUMBER');
   return resolveAccount(bankCode, accountNumber);
 }
 
@@ -605,7 +606,7 @@ export async function generatePaycode(userId: string, amountValue: number) {
     throw new Error('INSUFFICIENT_BALANCE');
   }
 
-  const code = Math.random().toString().slice(2, 8);
+  const code = (parseInt(crypto.randomBytes(4).toString('hex'), 16) % 900000 + 100000).toString();
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
   await prisma.$transaction(async (db: Prisma.TransactionClient) => {

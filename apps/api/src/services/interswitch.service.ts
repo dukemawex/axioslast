@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { env } from '../config/env';
 import { redis } from '../config/redis';
 import { prisma } from '../config/prisma';
+import { sendRateProvidersOutageEmail } from './email.service';
 
 const TOKEN_CACHE_KEY = 'interswitch:token';
 
@@ -206,6 +207,10 @@ export async function queryTransaction(
         expectedAmountInKobo: amountInKobo,
         queriedAmountInKobo: queriedAmount,
       });
+      void sendRateProvidersOutageEmail(
+        env.ADMIN_EMAIL,
+        `Interswitch amount mismatch detected\nreference=${reference}\nexpected=${amountInKobo}\nactual=${queriedAmount}`
+      ).catch(() => {});
       return { status: 'FAILED', amountInKobo: queriedAmount, responseCode, cardToken };
     }
 
@@ -338,9 +343,29 @@ export async function resolveAccount(
   bankCode: string,
   accountNumber: string
 ): Promise<{ accountName: string }> {
-  return {
-    accountName: `Account ${bankCode}-${accountNumber.slice(-4)}`,
-  };
+  const token = await getAccessToken();
+  const response = await axios.post(
+    `${env.INTERSWITCH_BASE_URL}/api/v1/transfers/resolve`,
+    {
+      bankCode,
+      accountNumber,
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+  const accountName = String(
+    (response.data as { accountName?: string; data?: { accountName?: string } }).accountName ||
+      (response.data as { data?: { accountName?: string } }).data?.accountName ||
+      ''
+  );
+  if (!accountName) {
+    throw new Error('PAYMENT_INIT_FAILED');
+  }
+  return { accountName };
 }
 
 export interface SendMoneyParams {
