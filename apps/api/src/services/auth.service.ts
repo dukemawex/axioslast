@@ -23,6 +23,14 @@ const RESET_OTP_TTL = 900; // 15 minutes
 
 const DUMMY_HASH = '$2b$12$dummyhashfortimingequalitywhenuserdoesnotexist00000000000';
 
+async function sendPhoneOtpBestEffort(phone: string, otp: string, context: string): Promise<void> {
+  try {
+    await sendPhoneOTP(phone, otp);
+  } catch (error) {
+    console.warn(`[Auth] Phone OTP send failed during ${context}. Continuing flow.`, error);
+  }
+}
+
 export interface RegisterInput {
   email: string;
   phone: string;
@@ -70,7 +78,7 @@ export async function register(input: RegisterInput): Promise<{ userId: string; 
 
   await sendEmailOTP(user.email, user.firstName, emailOTP);
 
-  await sendPhoneOTP(user.phone, phoneOTP);
+  await sendPhoneOtpBestEffort(user.phone, phoneOTP, 'register');
 
   return { userId: user.id, message: 'Registration successful. Please verify your email.' };
 }
@@ -90,7 +98,7 @@ export async function verifyEmail(userId: string, otp: string): Promise<{ verifi
   const phoneOTP = generateOTP();
   await storeOTP(`phone:${userId}`, phoneOTP, PHONE_OTP_TTL);
 
-  await sendPhoneOTP(user.phone, phoneOTP);
+  await sendPhoneOtpBestEffort(user.phone, phoneOTP, 'verify-email');
 
   return { verified: true };
 }
