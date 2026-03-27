@@ -183,10 +183,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </nav>
 
       {/* Main content */}
-      <main className="flex-1 md:ml-20 lg:ml-60 p-4 md:p-6 pt-20 md:pt-6 pb-24 md:pb-6">
-        {children}
-        <PINSetupModal open={!user?.isPinSet} />
-      </main>
-    </div>
+        <main className="flex-1 md:ml-20 lg:ml-60 p-4 md:p-6 pt-20 md:pt-6 pb-24 md:pb-6">
+          {children}
+          <p className="text-center text-xs text-text-muted mt-8">
+            Complaints or support: <a href="mailto:axiosbuild@gmail.com" className="text-brand-amber hover:underline">axiosbuild@gmail.com</a>
+          </p>
+          <PINSetupModal open={!user?.isPinSet} />
+        </main>
+      </div>
   );
 }

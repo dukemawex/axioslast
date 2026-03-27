@@ -8,7 +8,6 @@ import { env } from '../config/env';
 import { generateOTP, storeOTP, verifyOTP } from './otp.service';
 import { sendEmailOTP, sendWelcomeEmail, sendPasswordResetOTP, sendLoginNotificationEmail } from './email.service';
 import * as twoFactorService from './twoFactor.service';
-import { sendPhoneOTP } from './sms.service';
 
 const NATIONALITY_CURRENCY_MAP: Record<string, string> = {
   NG: 'NGN',
@@ -19,18 +18,9 @@ const NATIONALITY_CURRENCY_MAP: Record<string, string> = {
 };
 
 const OTP_TTL = 600; // 10 minutes
-const PHONE_OTP_TTL = 600;
 const RESET_OTP_TTL = 900; // 15 minutes
 
 const DUMMY_HASH = '$2b$12$dummyhashfortimingequalitywhenuserdoesnotexist00000000000';
-
-async function sendPhoneOtpBestEffort(phone: string, otp: string, context: string): Promise<void> {
-  try {
-    await sendPhoneOTP(phone, otp);
-  } catch (error) {
-    console.warn(`[Auth] Phone OTP send failed during ${context}. Continuing flow.`, error);
-  }
-}
 
 export interface RegisterInput {
   email: string;
@@ -91,15 +81,11 @@ export async function verifyEmail(userId: string, otp: string): Promise<{ verifi
 
   await prisma.user.update({
     where: { id: userId },
-    data: { isEmailVerified: true },
+    data: { isEmailVerified: true, isPhoneVerified: true },
   });
 
   await redis.del(`magic:${userId}`);
-
-  const phoneOTP = generateOTP();
-  await storeOTP(`phone:${userId}`, phoneOTP, PHONE_OTP_TTL);
-
-  await sendPhoneOtpBestEffort(user.phone, phoneOTP, 'verify-email');
+  await sendWelcomeEmail(user.email, user.firstName);
 
   return { verified: true };
 }
@@ -116,21 +102,25 @@ export async function verifyEmailLink(
   }
 
   const storedToken = await redis.get(`magic:${userId}`);
-  if (!storedToken || storedToken !== token) {
+  const storedBuffer = storedToken ? Buffer.from(storedToken, 'utf8') : null;
+  const providedBuffer = Buffer.from(token, 'utf8');
+  const isValidToken = Boolean(
+    storedBuffer &&
+      storedBuffer.length === providedBuffer.length &&
+      crypto.timingSafeEqual(storedBuffer, providedBuffer)
+  );
+  if (!isValidToken) {
     throw new Error('INVALID_TOKEN');
   }
 
   await prisma.user.update({
     where: { id: userId },
-    data: { isEmailVerified: true },
+    data: { isEmailVerified: true, isPhoneVerified: true },
   });
 
   await redis.del(`magic:${userId}`);
   await redis.del(`otp:email:${userId}`);
-
-  const phoneOTP = generateOTP();
-  await storeOTP(`phone:${userId}`, phoneOTP, PHONE_OTP_TTL);
-  await sendPhoneOtpBestEffort(user.phone, phoneOTP, 'verify-email-link');
+  await sendWelcomeEmail(user.email, user.firstName);
 
   return { verified: true, userId };
 }

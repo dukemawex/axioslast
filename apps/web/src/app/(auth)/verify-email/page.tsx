@@ -63,7 +63,7 @@ function VerifyEmailPageContent() {
           router.push('/login');
           return;
         }
-        router.push(`/verify-phone?userId=${encodeURIComponent(id)}`);
+        router.push('/login?verified=true');
         return;
       }
       setError('Verification link is invalid or expired. Please request a new one.');
@@ -97,7 +97,7 @@ function VerifyEmailPageContent() {
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('verify_userId', userId);
       }
-      router.push(`/verify-phone?userId=${encodeURIComponent(userId)}`);
+      router.push('/login?verified=true');
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string; message?: string } } };
       const code = e?.response?.data?.error || '';
@@ -182,6 +182,10 @@ function VerifyEmailPageContent() {
           </button>
         )}
       </div>
+      <p className="text-center text-xs text-text-muted mt-6">
+        Need help? Contact Axios Pay at{' '}
+        <a href="mailto:axiosbuild@gmail.com" className="text-brand-amber hover:underline">axiosbuild@gmail.com</a>
+      </p>
     </Card>
   );
 }

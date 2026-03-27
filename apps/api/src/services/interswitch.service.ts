@@ -69,6 +69,7 @@ export async function getAccessToken(): Promise<string> {
       `${env.INTERSWITCH_PASSPORT_URL}/passport/oauth/token`,
       'grant_type=client_credentials&scope=profile',
       {
+        timeout: 20000,
         headers: {
           Authorization: `Basic ${credentials}`,
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -106,27 +107,50 @@ export async function initiatePayment(
   const amountInKobo = Math.round(params.amount * 100);
   const token = await getAccessToken();
 
+  const checkoutEndpointCandidates = [
+    '/collections/api/v1/getcheckupurl',
+    '/collections/api/v1/getcheckouturl',
+  ];
+
   try {
-    const response = await axios.post<CheckoutResponse>(
-      `${env.INTERSWITCH_BASE_URL}/collections/api/v1/getcheckupurl`,
-      {
-        merchantCode: env.INTERSWITCH_MERCHANT_CODE,
-        payableCode: env.INTERSWITCH_PAY_ITEM_ID,
-        amount: amountInKobo,
-        redirectUrl: `${env.FRONTEND_URL}/dashboard/deposit/callback`,
-        currencyCode: '566',
-        customerId: params.userId,
-        customerEmail: params.userEmail,
-        transactionReference: reference,
-        description: 'Axios Pay Wallet Deposit',
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+    let response: { data: CheckoutResponse } | null = null;
+    let lastError: unknown = null;
+
+    for (const endpoint of checkoutEndpointCandidates) {
+      try {
+        response = await axios.post<CheckoutResponse>(
+          `${env.INTERSWITCH_BASE_URL}${endpoint}`,
+          {
+            merchantCode: env.INTERSWITCH_MERCHANT_CODE,
+            payableCode: env.INTERSWITCH_PAY_ITEM_ID,
+            amount: amountInKobo,
+            redirectUrl: `${env.FRONTEND_URL}/dashboard/deposit/callback`,
+            currencyCode: '566',
+            customerId: params.userId,
+            customerEmail: params.userEmail,
+            transactionReference: reference,
+            description: 'Axios Pay Wallet Deposit',
+          },
+          {
+            timeout: 25000,
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        break;
+      } catch (error) {
+        lastError = error;
+        if (axios.isAxiosError(error) && error.response?.status !== 404) {
+          break;
+        }
       }
-    );
+    }
+
+    if (!response) {
+      throw lastError ?? new Error('PAYMENT_INIT_FAILED');
+    }
 
     const paymentUrl =
       response.data.paymentUrl ??
@@ -184,6 +208,7 @@ export async function queryTransaction(
     const response = await axios.get<QueryTransactionResponse>(
       `${env.INTERSWITCH_BASE_URL}/collections/api/v1/gettransaction.json`,
       {
+        timeout: 25000,
         params: {
           merchantcode: env.INTERSWITCH_MERCHANT_CODE,
           transactionreference: reference,
