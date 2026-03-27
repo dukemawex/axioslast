@@ -130,6 +130,11 @@ export const api = {
     requestUnfreezeOtp: () => apiClient.post('/users/unfreeze/request-otp'),
     unfreeze: (data: unknown) => apiClient.post('/users/unfreeze', data),
   },
+  kyc: {
+    requirements: () => apiClient.get('/kyc/requirements'),
+    status: () => apiClient.get('/kyc/status'),
+    verifyIdentity: (data: unknown) => apiClient.post('/kyc/verify-identity', data),
+  },
   wallets: {
     getAll: () => apiClient.get('/wallets'),
     initiateDeposit: (data: unknown) => apiClient.post('/wallets/deposit/initiate', data),
@@ -151,6 +156,10 @@ export const api = {
     resolveBankAccount: (data: unknown) => apiClient.post('/wallets/transfers/resolve', data),
     sendTransfer: (data: TransferRequest, pinToken?: string) =>
       apiClient.post('/wallets/transfers/send', data, {
+        headers: pinToken ? { 'X-Pin-Token': pinToken } : undefined,
+      }),
+    transferToAxiosUser: (data: InternalTransferRequest, pinToken?: string) =>
+      apiClient.post('/wallets/transfers/internal', data, {
         headers: pinToken ? { 'X-Pin-Token': pinToken } : undefined,
       }),
     generatePaycode: (data: unknown) => apiClient.post('/wallets/paycodes', data),
@@ -192,6 +201,12 @@ interface TransferRequest {
   bankCode: string;
   accountNumber: string;
   accountName: string;
+  amount: number;
+  narration?: string;
+}
+
+interface InternalTransferRequest {
+  recipientEmail: string;
   amount: number;
   narration?: string;
 }

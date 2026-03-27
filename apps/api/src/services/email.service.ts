@@ -189,3 +189,23 @@ export async function sendRecurringDepositFailedEmail(to: string, firstName: str
     `,
   });
 }
+
+export async function sendIdentityVerificationSuccessEmail(to: string, firstName: string): Promise<void> {
+  await transporter.sendMail({
+    from: `"Axios Pay" <${env.SMTP_USER}>`,
+    to,
+    subject: 'Identity verified on Axios Pay ✅',
+    html: `
+      <div style="font-family: DM Sans, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+        <h1 style="color: #1A2332; font-family: Playfair Display, serif;">Axios Pay</h1>
+        <h2 style="color: #1A2332;">Hi ${firstName}, your identity is verified</h2>
+        <p style="color: #5A6474;">Great news — your identity verification is complete.</p>
+        <p style="color: #5A6474;">You now have higher limits and full platform access.</p>
+        <div style="background: #C8772A; border-radius: 8px; padding: 16px 24px; display: inline-block; margin: 8px 0 24px;">
+          <a href="${env.FRONTEND_URL}/profile/kyc" style="color: white; text-decoration: none; font-weight: bold;">View verification status</a>
+        </div>
+        <p style="color: #9AA3AE; font-size: 12px; margin-top: 20px;">Axios Pay — Cross-Border FX, Unlocked.</p>
+      </div>
+    `,
+  });
+}

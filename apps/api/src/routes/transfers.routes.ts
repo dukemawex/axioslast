@@ -17,5 +17,6 @@ router.use(requireAuth);
 router.get('/banks', walletController.listBanks);
 router.post('/resolve', walletController.resolveBankAccount);
 router.post('/send', walletController.sendTransfer);
+router.post('/internal', walletController.transferToAxiosUser);
 
 export default router;

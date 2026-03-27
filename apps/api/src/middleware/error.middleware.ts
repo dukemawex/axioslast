@@ -38,6 +38,11 @@ const ERROR_MAP: Record<string, { status: number; message: string }> = {
   TWO_FACTOR_NOT_ENABLED: { status: 400, message: 'Two-factor authentication is not enabled' },
   TWO_FACTOR_SETUP_EXPIRED: { status: 400, message: '2FA setup expired. Please start again.' },
   TWO_FACTOR_TEMP_TOKEN_INVALID: { status: 401, message: 'Invalid or expired 2FA login session' },
+  INVALID_NIN: { status: 422, message: 'NIN must be exactly 11 digits.' },
+  INVALID_NATIONAL_ID: { status: 422, message: 'ID number format is invalid for your country.' },
+  ID_ALREADY_VERIFIED: { status: 400, message: 'Your identity has already been verified.' },
+  ID_VERIFICATION_ATTEMPTS_EXCEEDED: { status: 429, message: 'Too many verification attempts. Please try again tomorrow.' },
+  VERIFICATION_SERVICE_UNAVAILABLE: { status: 503, message: 'Identity verification is temporarily unavailable. Please try again later.' },
 };
 
 export function errorMiddleware(

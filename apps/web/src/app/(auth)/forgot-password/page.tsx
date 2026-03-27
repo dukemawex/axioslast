@@ -11,10 +11,16 @@ import { Card } from '@/components/ui/Card';
 import { OTPInput } from '@/components/ui/OTPInput';
 
 const emailSchema = z.object({ email: z.string().email('Valid email required') });
-const resetSchema = z.object({
-  otp: z.string().length(6),
-  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
-});
+const resetSchema = z
+  .object({
+    otp: z.string().length(6),
+    newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+    confirmPassword: z.string().min(1, 'Confirm Password is required'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'Passwords do not match',
+  });
 
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState<'email' | 'reset'>('email');
@@ -25,7 +31,13 @@ export default function ForgotPasswordPage() {
   const router = useRouter();
 
   const emailForm = useForm<{ email: string }>({ resolver: zodResolver(emailSchema) });
-  const resetForm = useForm<{ otp: string; newPassword: string }>({ resolver: zodResolver(resetSchema) });
+  const resetForm = useForm<{ otp: string; newPassword: string; confirmPassword: string }>({
+    resolver: zodResolver(resetSchema),
+    mode: 'onChange',
+  });
+  const newPassword = resetForm.watch('newPassword', '');
+  const confirmPassword = resetForm.watch('confirmPassword', '');
+  const passwordMatch = confirmPassword.length > 0 && confirmPassword === newPassword;
 
   async function onEmailSubmit(data: { email: string }) {
     setLoading(true);
@@ -76,6 +88,12 @@ export default function ForgotPasswordPage() {
           <form onSubmit={resetForm.handleSubmit(onResetSubmit)} className="space-y-4 mt-4">
             <input type="hidden" {...resetForm.register('otp')} />
             <Input label="New Password" type="password" {...resetForm.register('newPassword')} error={resetForm.formState.errors.newPassword?.message} />
+            <Input label="Confirm Password" type="password" {...resetForm.register('confirmPassword')} error={resetForm.formState.errors.confirmPassword?.message} />
+            {confirmPassword ? (
+              <p className={`text-xs ${passwordMatch ? 'text-success' : 'text-error'}`}>
+                {passwordMatch ? '✅ Passwords match' : '❌ Passwords do not match'}
+              </p>
+            ) : null}
             <Button type="submit" loading={loading} className="w-full">Reset Password</Button>
           </form>
         </>

@@ -140,6 +140,15 @@ export default function DashboardPage() {
         <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wide mb-4">Live Corridor Rates</h2>
         <RatesGrid />
       </div>
+
+      <div className="mt-6 bg-brand-bg rounded-card border border-border p-4">
+        <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wide mb-2">Cross-border payments, unlocked</h2>
+        <p className="text-sm text-text-secondary">
+          Axios Pay partners with local banks across our supported countries and payment rails like Interswitch/Quickteller
+          to make local-currency spending seamless. Example: if you travel from Nigeria to Nairobi for a conference, you can
+          swap NGN to KES and pay directly in Kenya without routing through USD.
+        </p>
+      </div>
     </div>
   );
 }

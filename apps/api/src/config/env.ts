@@ -39,6 +39,11 @@ const envSchema = z.object({
   EXCHANGE_RATE_API_KEY: z.string().optional(),
   RATE_REFRESH_INTERVAL_MS: z.coerce.number().default(600000),
   RATE_SPREAD_PERCENT: z.coerce.number().default(0.3),
+  DOJAH_APP_ID: z.string().optional(),
+  DOJAH_SECRET_KEY: z.string().optional(),
+  SMILE_IDENTITY_PARTNER_ID: z.string().optional(),
+  SMILE_IDENTITY_API_KEY: z.string().optional(),
+  SMILE_IDENTITY_SID_SERVER: z.string().default('0'),
 });
 
 const result = envSchema.safeParse(process.env);
@@ -68,6 +73,11 @@ const defaultedKeys = [
   'ENCRYPTION_KEY',
   'ADMIN_EMAIL',
   'EXCHANGE_RATE_API_KEY',
+  'DOJAH_APP_ID',
+  'DOJAH_SECRET_KEY',
+  'SMILE_IDENTITY_PARTNER_ID',
+  'SMILE_IDENTITY_API_KEY',
+  'SMILE_IDENTITY_SID_SERVER',
 ] as const;
 
 const missingKeys = defaultedKeys.filter((key) => !process.env[key]);

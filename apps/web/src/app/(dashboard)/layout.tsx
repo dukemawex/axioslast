@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { LayoutDashboard, ArrowLeftRight, Wallet, CreditCard, User, LogOut, Bell, ShieldCheck, Plane, Gift, Lock, Building2, Menu, X, Landmark, ReceiptText, Link2 } from 'lucide-react';
 import { PINSetupModal } from '@/components/PINSetupModal';
+import { KYCBanner } from '@/components/KYCBanner';
 import { useAuthStore } from '@/store/authStore';
 import { api } from '@/lib/api';
 import { useState } from 'react';
@@ -184,6 +185,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main content */}
         <main className="flex-1 md:ml-20 lg:ml-60 p-4 md:p-6 pt-20 md:pt-6 pb-24 md:pb-6">
+          <KYCBanner verified={user?.idVerificationStatus === 'VERIFIED'} />
           {children}
           <p className="text-center text-xs text-text-muted mt-8">
             Complaints or support: <a href="mailto:axiosbuild@gmail.com" className="text-brand-amber hover:underline">axiosbuild@gmail.com</a>

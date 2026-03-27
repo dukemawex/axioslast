@@ -10,6 +10,7 @@ import billsRoutes from './bills.routes';
 import paymentLinksRoutes from './payment-links.routes';
 import transfersRoutes from './transfers.routes';
 import paycodesRoutes from './paycodes.routes';
+import kycRoutes from './kyc.routes';
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use('/bills', billsRoutes);
 router.use('/payment-links', paymentLinksRoutes);
 router.use('/transfers', transfersRoutes);
 router.use('/paycodes', paycodesRoutes);
+router.use('/kyc', kycRoutes);
 
 export default router;

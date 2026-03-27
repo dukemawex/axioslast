@@ -30,6 +30,7 @@ router.delete('/payment-links/:id', walletController.deactivatePaymentLink);
 router.get('/transfers/banks', walletController.listBanks);
 router.post('/transfers/resolve', walletController.resolveBankAccount);
 router.post('/transfers/send', walletController.sendTransfer);
+router.post('/transfers/internal', walletController.transferToAxiosUser);
 router.post('/paycodes', walletController.generatePaycode);
 router.get('/paycodes', walletController.listPaycodes);
 

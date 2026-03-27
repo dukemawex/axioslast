@@ -43,6 +43,12 @@ const sendMoneySchema = z.object({
   narration: z.string().max(200).optional(),
 });
 
+const transferToAxiosUserSchema = z.object({
+  recipientEmail: z.string().email(),
+  amount: z.number().positive().min(100),
+  narration: z.string().max(200).optional(),
+});
+
 const paycodeSchema = z.object({
   amount: z.number().positive(),
 });
@@ -254,6 +260,26 @@ export async function sendTransfer(req: AuthRequest, res: Response, next: NextFu
       narration: data.narration,
       pinToken: req.header('X-Pin-Token') || undefined,
     });
+    res.json(result);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'VALIDATION_ERROR', details: err.errors });
+      return;
+    }
+    next(err);
+  }
+}
+
+export async function transferToAxiosUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const data = transferToAxiosUserSchema.parse(req.body);
+    const result = await walletService.transferToAxiosUser(
+      req.userId!,
+      data.recipientEmail,
+      data.amount,
+      data.narration,
+      req.header('X-Pin-Token') || undefined
+    );
     res.json(result);
   } catch (err) {
     if (err instanceof z.ZodError) {

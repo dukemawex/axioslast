@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { SwapWidget } from '@/components/ui/SwapWidget';
 import { getCurrencyDisplay } from '@/lib/currencies';
 import { useRates } from '@/hooks/useRates';
+import { useAuthStore } from '@/store/authStore';
 
 interface SwapResult {
   fromAmount: string;
@@ -17,6 +18,7 @@ export default function SwapPage() {
   const [success, setSuccess] = useState<SwapResult | null>(null);
   const queryClient = useQueryClient();
   const { rates } = useRates();
+  const { user } = useAuthStore();
 
   const oldestAge = rates.length ? Math.max(...rates.map((rate) => rate.ageSeconds)) : Number.POSITIVE_INFINITY;
   const hasFallbackRate = rates.some((rate) => rate.provider === 'database-fallback');
@@ -51,6 +53,12 @@ export default function SwapPage() {
           <button onClick={() => setSuccess(null)} className="text-sm text-text-muted hover:text-text-primary mt-2">
             Make another swap
           </button>
+        </div>
+      )}
+      {user?.idVerificationStatus !== 'VERIFIED' && (
+        <div className="mb-4 p-3 rounded-btn border border-amber-300 bg-amber-50 text-sm text-amber-900">
+          You&apos;ve reached your daily limit. Verify your identity to increase your limit to 500,000 NGN/day.{' '}
+          <a href="/profile/kyc" className="underline font-medium">Verify Now →</a>
         </div>
       )}
 

@@ -9,6 +9,9 @@ export interface User {
   lastName: string;
   nationality: string;
   kycStatus: string;
+  idVerificationStatus?: string;
+  idVerificationFailureReason?: string | null;
+  idVerifiedAt?: string | null;
   isEmailVerified: boolean;
   isPhoneVerified: boolean;
   isPinSet?: boolean;
