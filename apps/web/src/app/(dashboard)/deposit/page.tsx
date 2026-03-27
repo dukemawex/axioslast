@@ -234,7 +234,7 @@ export default function DepositPage() {
 
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
         {[
-          { label: 'Pay with Card', value: 'card' as const },
+          { label: 'Pay via Interswitch Link', value: 'card' as const },
           { label: 'Bank Transfer', value: 'bank' as const },
           { label: 'USSD', value: 'ussd' as const },
           { label: 'Auto-Deposit', value: 'auto' as const },
