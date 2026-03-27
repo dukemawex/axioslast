@@ -18,18 +18,31 @@ const step1Schema = z.object({
   nationality: z.enum(['NG', 'UG', 'KE', 'GH', 'ZA'], { required_error: 'Select your country' }),
 });
 
-const step2Schema = z.object({
-  countryCode: z.string().min(1, 'Select country code'),
-  localPhone: z.string().regex(/^\d{6,14}$/, 'Enter a valid local phone number'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-});
+const step2Schema = z
+  .object({
+    countryCode: z.string().min(1, 'Select country code'),
+    localPhone: z.string().regex(/^\d{6,14}$/, 'Enter a valid local phone number'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    confirmPassword: z.string().min(1, 'Confirm Password is required'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'Passwords do not match',
+  });
 
 type Step1 = z.infer<typeof step1Schema>;
 type Step2 = z.infer<typeof step2Schema>;
 
 export default function RegisterPage() {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [step1Data, setStep1Data] = useState<Step1 | null>(null);
+  const [registeredUserId, setRegisteredUserId] = useState('');
+  const [identityData, setIdentityData] = useState({
+    idNumber: '',
+    firstName: '',
+    lastName: '',
+    dateOfBirth: '',
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -37,9 +50,12 @@ export default function RegisterPage() {
   const form1 = useForm<Step1>({ resolver: zodResolver(step1Schema) });
   const form2 = useForm<Step2>({
     resolver: zodResolver(step2Schema),
+    mode: 'onChange',
     defaultValues: { countryCode: '+234', localPhone: '' },
   });
   const passwordValue = form2.watch('password', '');
+  const confirmPasswordValue = form2.watch('confirmPassword', '');
+  const confirmPasswordMatches = confirmPasswordValue.length > 0 && confirmPasswordValue === passwordValue;
   const passwordChecks = useMemo(
     () => [
       { label: 'At least 8 characters', met: passwordValue.length >= 8 },
@@ -82,7 +98,14 @@ export default function RegisterPage() {
         sessionStorage.setItem('verify_userId', userId);
         sessionStorage.setItem('verify_email', step1Data.email);
       }
-      router.push(`/verify-email?userId=${encodeURIComponent(userId)}`);
+      setRegisteredUserId(userId);
+      setIdentityData({
+        idNumber: '',
+        firstName: step1Data.firstName,
+        lastName: step1Data.lastName,
+        dateOfBirth: '',
+      });
+      setStep(3);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string; details?: Array<{ path?: string[]; message?: string }> } } };
       const code = e?.response?.data?.error || '';
@@ -109,19 +132,43 @@ export default function RegisterPage() {
     }
   }
 
+  function continueToEmailVerification(skipForNow: boolean) {
+    if (!registeredUserId) return;
+    if (!skipForNow && typeof window !== 'undefined') {
+      sessionStorage.setItem(
+        'registration_identity_draft',
+        JSON.stringify({
+          nationality: step1Data?.nationality || 'NG',
+          ...identityData,
+        })
+      );
+    }
+    router.push(`/verify-email?userId=${encodeURIComponent(registeredUserId)}`);
+  }
+
+  const identityRequirement = step1Data
+    ? {
+        NG: { label: 'National Identification Number (NIN)', hint: '11 digits e.g. 71234567890' },
+        UG: { label: 'Ndaga Muntu National ID', hint: '14 characters' },
+        KE: { label: 'Kenyan National ID', hint: '8 digits' },
+        GH: { label: 'Ghana Card Number', hint: 'GHA-123456789-0' },
+        ZA: { label: 'South African ID Number', hint: '13 digits' },
+      }[step1Data.nationality]
+    : { label: 'National ID', hint: '' };
+
   return (
     <Card>
       <div className="mb-6">
         <div className="w-full bg-border rounded-full h-1.5 mb-4">
           <div
             className="bg-brand-amber h-1.5 rounded-full transition-all duration-300"
-            style={{ width: step === 1 ? '50%' : '100%' }}
+            style={{ width: step === 1 ? '34%' : step === 2 ? '67%' : '100%' }}
           />
         </div>
         <h2 className="font-display text-xl font-semibold text-text-primary">
-          {step === 1 ? 'Create your account' : 'Almost there!'}
+          {step === 1 ? 'Create your account' : step === 2 ? 'Almost there!' : 'Identity verification (optional)'}
         </h2>
-        <p className="text-sm text-text-muted mt-1">Step {step} of 2</p>
+        <p className="text-sm text-text-muted mt-1">Step {step} of 3</p>
       </div>
 
       {error && (
@@ -152,7 +199,7 @@ export default function RegisterPage() {
           </div>
           <Button type="submit" className="w-full">Continue</Button>
         </form>
-      ) : (
+      ) : step === 2 ? (
         <form onSubmit={form2.handleSubmit(onStep2)} className="space-y-4">
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-text-primary">Phone Number</label>
@@ -183,6 +230,17 @@ export default function RegisterPage() {
             )}
           </div>
           <Input label="Password" type="password" {...form2.register('password')} error={form2.formState.errors.password?.message} />
+          <Input
+            label="Confirm Password"
+            type="password"
+            {...form2.register('confirmPassword')}
+            error={form2.formState.errors.confirmPassword?.message}
+          />
+          {confirmPasswordValue ? (
+            <p className={`text-xs ${confirmPasswordMatches ? 'text-success' : 'text-error'}`}>
+              {confirmPasswordMatches ? '✅ Passwords match' : '❌ Passwords do not match'}
+            </p>
+          ) : null}
           <ul className="space-y-1 text-xs">
             {passwordChecks.map((check) => (
               <li key={check.label} className={check.met ? 'text-success' : 'text-error'}>
@@ -193,6 +251,54 @@ export default function RegisterPage() {
           <Button type="submit" loading={loading} disabled={loading} className="w-full">Create Account</Button>
           <Button type="button" variant="ghost" className="w-full" onClick={() => setStep(1)}>Back</Button>
         </form>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-text-secondary">
+            Verify your identity now to unlock higher limits immediately, or skip and do it later in your dashboard.
+          </p>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-text-primary">{identityRequirement.label}</label>
+            <input
+              value={identityData.idNumber}
+              onChange={(e) => setIdentityData((prev) => ({ ...prev, idNumber: e.target.value }))}
+              placeholder={identityRequirement.hint}
+              className="w-full px-3 py-2.5 rounded-btn border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-brand-amber text-text-primary"
+            />
+            <p className="text-xs text-text-muted">{identityRequirement.hint}</p>
+          </div>
+          <Input
+            label="First Name"
+            value={identityData.firstName}
+            onChange={(e) => setIdentityData((prev) => ({ ...prev, firstName: e.target.value }))}
+          />
+          <Input
+            label="Last Name"
+            value={identityData.lastName}
+            onChange={(e) => setIdentityData((prev) => ({ ...prev, lastName: e.target.value }))}
+          />
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-text-primary">Date of Birth</label>
+            <input
+              type="date"
+              value={identityData.dateOfBirth}
+              onChange={(e) => setIdentityData((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
+              className="w-full px-3 py-2.5 rounded-btn border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-brand-amber text-text-primary"
+            />
+          </div>
+          <p className="text-xs text-text-muted">
+            Your ID number is encrypted and never stored in plain text. We only use it to verify your identity.
+          </p>
+          <Button type="button" className="w-full" onClick={() => continueToEmailVerification(false)}>
+            Verify Now
+          </Button>
+          <button
+            type="button"
+            className="w-full text-sm text-brand-amber hover:underline"
+            onClick={() => continueToEmailVerification(true)}
+          >
+            Skip for now
+          </button>
+        </div>
       )}
 
       <p className="text-center text-sm text-text-muted mt-6">

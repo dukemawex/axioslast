@@ -24,6 +24,13 @@ model User {
   lastName         String
   nationality      String
   kycStatus        KycStatus   @default(PENDING)
+  ninNumber        String?
+  nationalIdNumber String?
+  idVerificationStatus IdVerificationStatus @default(NOT_SUBMITTED)
+  idVerificationProvider String?
+  idVerificationRef String?
+  idVerifiedAt     DateTime?
+  idVerificationFailureReason String?
   isEmailVerified  Boolean     @default(false)
   isPhoneVerified  Boolean     @default(false)
   cardToken        String?
@@ -118,6 +125,13 @@ enum KycStatus {
   SUBMITTED
   APPROVED
   REJECTED
+}
+
+enum IdVerificationStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  FAILED
 }
 
 enum TransactionType {

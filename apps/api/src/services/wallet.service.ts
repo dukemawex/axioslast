@@ -466,6 +466,13 @@ export async function deactivatePaymentLink(userId: string, id: string) {
 }
 
 export async function listBanksCached() {
+  if (process.env.NODE_ENV !== 'production') {
+    return [
+      { code: '0001', name: 'Axios Mock Bank' },
+      { code: '0002', name: 'Sandbox Trust Bank' },
+      { code: '0003', name: 'Demo National Bank' },
+    ];
+  }
   const cacheKey = 'interswitch:banks:v1';
   try {
     const cached = await redis.get(cacheKey);
@@ -488,6 +495,9 @@ export async function listBanksCached() {
 
 export async function resolveBankAccount(bankCode: string, accountNumber: string) {
   if (!/^\d{10}$/.test(accountNumber)) throw new Error('INVALID_ACCOUNT_NUMBER');
+  if (process.env.NODE_ENV !== 'production') {
+    return { accountName: `Mock User ${accountNumber.slice(-4)}` };
+  }
   return resolveAccount(bankCode, accountNumber);
 }
 
@@ -545,6 +555,21 @@ export async function withdrawToBank(
   });
 
   try {
+    if (process.env.NODE_ENV !== 'production') {
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+        data: { status: 'COMPLETED' },
+      });
+      await prisma.notification.create({
+        data: {
+          userId,
+          type: 'WITHDRAWAL',
+          message: `Mock withdrawal of ₦${amount.toFixed(2)} completed`,
+          metadata: { reference: txRef, mock: true },
+        },
+      });
+      return { status: 'SUCCESS', reference: txRef, mock: true };
+    }
     const transfer = await sendMoney(userId, {
       beneficiaryBankCode: params.bankCode,
       beneficiaryAccountNumber: params.accountNumber,
@@ -596,6 +621,66 @@ export async function withdrawToBank(
     });
     throw error;
   }
+}
+
+export async function transferToAxiosUser(
+  userId: string,
+  recipientEmail: string,
+  amountValue: number,
+  narration?: string,
+  pinToken?: string
+) {
+  const amount = new Decimal(amountValue);
+  if (amount.lte(0)) throw new Error('INVALID_AMOUNT');
+  await verifyPinToken(userId, pinToken);
+  const senderWallet = await getWalletByCurrency(userId, 'NGN');
+  if (!senderWallet || new Decimal(senderWallet.balance.toString()).lt(amount)) {
+    throw new Error('INSUFFICIENT_BALANCE');
+  }
+  const recipient = await prisma.user.findUnique({
+    where: { email: recipientEmail.toLowerCase() },
+    select: { id: true },
+  });
+  if (!recipient) throw new Error('USER_NOT_FOUND');
+
+  const reference = `AXP-INT-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  await prisma.$transaction(async (db: Prisma.TransactionClient) => {
+    await db.wallet.update({
+      where: { userId_currency: { userId, currency: 'NGN' } },
+      data: { balance: { decrement: amount.toNumber() } },
+    });
+    await db.wallet.upsert({
+      where: { userId_currency: { userId: recipient.id, currency: 'NGN' } },
+      create: { userId: recipient.id, currency: 'NGN', balance: amount.toNumber() },
+      update: { balance: { increment: amount.toNumber() } },
+    });
+    await db.transaction.create({
+      data: {
+        userId,
+        type: 'WITHDRAWAL',
+        status: 'COMPLETED',
+        fromCurrency: 'NGN',
+        toCurrency: 'NGN',
+        fromAmount: amount,
+        toAmount: amount,
+        exchangeRate: new Decimal(1),
+        fee: new Decimal(0),
+        reference,
+        narration: narration || `Transfer to Axios Pay user ${recipientEmail}`,
+        metadata: { recipientEmail, internalTransfer: true, mock: process.env.NODE_ENV !== 'production' },
+      },
+    });
+    await db.notification.create({
+      data: {
+        userId,
+        type: 'WITHDRAWAL',
+        message: `Transfer of ₦${amount.toFixed(2)} to ${recipientEmail} completed`,
+        metadata: { reference, internalTransfer: true },
+      },
+    });
+  });
+
+  return { status: 'SUCCESS', reference, mock: process.env.NODE_ENV !== 'production' };
 }
 
 export async function generatePaycode(userId: string, amountValue: number) {
