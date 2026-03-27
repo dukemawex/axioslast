@@ -14,7 +14,9 @@ const apiLimiter = rateLimit({
 router.use(apiLimiter);
 router.use(requireAuth);
 router.get('/', walletController.getWallets);
+router.post('/deposit/initiate', walletController.fundWallet);
 router.post('/fund', walletController.fundWallet);
+router.get('/deposit/verify/:reference', walletController.verifyDeposit);
 router.post('/swap', walletController.swapCurrency);
 router.get('/transactions', walletController.getTransactions);
 router.get('/transactions/:id', walletController.getTransaction);

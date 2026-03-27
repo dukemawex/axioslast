@@ -6,16 +6,27 @@ export async function interswitchWebhook(req: Request, res: Response, next: Next
   try {
     const signature = req.headers['x-interswitch-signature'] as string || '';
     const rawBody: Buffer = (req as Request & { rawBody?: Buffer }).rawBody || Buffer.from(JSON.stringify(req.body));
+    const payload =
+      typeof req.body === 'object' && !Buffer.isBuffer(req.body)
+        ? (req.body as Record<string, unknown>)
+        : (JSON.parse(rawBody.toString('utf8')) as Record<string, unknown>);
 
     const isValid = verifyWebhookSignature(rawBody, signature);
     if (!isValid) {
-      res.status(200).json({ message: 'OK' }); // Always return 200
+      console.error('Invalid Interswitch webhook signature');
+      res.status(200).json({ message: 'OK' });
       return;
     }
 
-    const { responseCode, transactionReference } = req.body;
+    const { responseCode, transactionReference, paymentStatus, status } = payload as {
+      responseCode?: string;
+      transactionReference?: string;
+      paymentStatus?: string;
+      status?: string;
+    };
+    const normalizedStatus = (paymentStatus || status || '').toUpperCase();
 
-    if (responseCode === '00' && transactionReference) {
+    if ((responseCode === '00' || normalizedStatus === 'PAID') && transactionReference) {
       await completeDeposit(transactionReference);
     }
 

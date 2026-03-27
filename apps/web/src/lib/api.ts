@@ -130,7 +130,8 @@ export const api = {
   },
   wallets: {
     getAll: () => apiClient.get('/wallets'),
-    fund: (data: unknown) => apiClient.post('/wallets/fund', data),
+    initiateDeposit: (data: unknown) => apiClient.post('/wallets/deposit/initiate', data),
+    verifyDeposit: (reference: string) => apiClient.get(`/wallets/deposit/verify/${reference}`),
     swap: (data: unknown, pinToken?: string) =>
       apiClient.post('/wallets/swap', data, {
         headers: pinToken ? { 'X-Pin-Token': pinToken } : undefined,

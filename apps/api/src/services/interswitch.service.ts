@@ -1,66 +1,116 @@
 import crypto from 'crypto';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
+import { nanoid } from 'nanoid';
 import { env } from '../config/env';
+import { redis } from '../config/redis';
 
-interface AccessTokenCache {
-  token: string;
-  expiresAt: number;
+const TOKEN_CACHE_KEY = 'interswitch:token';
+
+interface OAuthTokenResponse {
+  access_token: string;
+  expires_in?: number;
 }
 
-let tokenCache: AccessTokenCache | null = null;
+interface CheckoutResponse {
+  paymentLink?: string;
+  paymentUrl?: string;
+  checkoutUrl?: string;
+  data?: {
+    paymentLink?: string;
+    paymentUrl?: string;
+    checkoutUrl?: string;
+  };
+}
+
+interface QueryTransactionResponse {
+  responseCode?: string;
+  status?: string;
+  paymentStatus?: string;
+}
+
+function logInterswitchApiError(context: string, error: unknown): void {
+  if (axios.isAxiosError(error)) {
+    const axiosError = error as AxiosError;
+    console.error(`[Interswitch] ${context} failed`, {
+      status: axiosError.response?.status,
+      data: axiosError.response?.data,
+      message: axiosError.message,
+    });
+    return;
+  }
+
+  console.error(`[Interswitch] ${context} failed`, error);
+}
 
 export async function getAccessToken(): Promise<string> {
-  if (tokenCache && Date.now() < tokenCache.expiresAt - 30000) {
-    return tokenCache.token;
+  try {
+    const cachedToken = await redis.get(TOKEN_CACHE_KEY);
+    if (cachedToken) {
+      return cachedToken;
+    }
+  } catch (error) {
+    console.warn('[Interswitch] Failed to read token from Redis cache', error);
   }
 
   const credentials = Buffer.from(
     `${env.INTERSWITCH_CLIENT_ID}:${env.INTERSWITCH_CLIENT_SECRET}`
   ).toString('base64');
 
-  const response = await axios.post(
-    `${env.INTERSWITCH_PASSPORT_URL}/oauth/token`,
-    'grant_type=client_credentials',
-    {
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+  try {
+    const response = await axios.post<OAuthTokenResponse>(
+      `${env.INTERSWITCH_PASSPORT_URL}/passport/oauth/token`,
+      'grant_type=client_credentials&scope=profile',
+      {
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }
+    );
+
+    const token = response.data.access_token;
+    const expiresIn = response.data.expires_in ?? 3600;
+    const cacheTtl = Math.max(expiresIn - 60, 1);
+
+    try {
+      await redis.set(TOKEN_CACHE_KEY, token, 'EX', cacheTtl);
+    } catch (error) {
+      console.warn('[Interswitch] Failed to cache token in Redis', error);
     }
-  );
 
-  const expiresIn = (response.data.expires_in || 3600) * 1000;
-  tokenCache = {
-    token: response.data.access_token,
-    expiresAt: Date.now() + expiresIn,
-  };
-
-  return tokenCache.token;
+    return token;
+  } catch (error) {
+    logInterswitchApiError('OAuth token fetch', error);
+    throw new Error('PAYMENT_INIT_FAILED');
+  }
 }
 
 interface InitiatePaymentParams {
-  txRef: string;
-  amount: number; // in kobo/lowest denomination
-  currency: string;
-  customerEmail: string;
-  customerName: string;
-  redirectUrl: string;
+  amount: number; // amount in NGN
+  userId: string;
+  userEmail: string;
 }
 
-export async function initiatePayment(params: InitiatePaymentParams): Promise<string> {
+export async function initiatePayment(
+  params: InitiatePaymentParams
+): Promise<{ paymentUrl: string; reference: string }> {
+  const reference = nanoid(20);
+  const amountInKobo = Math.round(params.amount * 100);
+  const token = await getAccessToken();
+
   try {
-    const token = await getAccessToken();
-    const response = await axios.post(
-      `${env.INTERSWITCH_BASE_URL}/collections/api/v1/purchases`,
+    const response = await axios.post<CheckoutResponse>(
+      `${env.INTERSWITCH_BASE_URL}/collections/api/v1/getcheckupurl`,
       {
         merchantCode: env.INTERSWITCH_MERCHANT_CODE,
         payableCode: env.INTERSWITCH_PAY_ITEM_ID,
-        transactionReference: params.txRef,
-        amount: params.amount,
-        currency: params.currency,
-        redirectUrl: params.redirectUrl,
-        customerEmail: params.customerEmail,
-        customerName: params.customerName,
+        amount: amountInKobo,
+        redirectUrl: `${env.FRONTEND_URL}/dashboard/deposit/callback`,
+        currencyCode: '566',
+        customerId: params.userId,
+        customerEmail: params.userEmail,
+        transactionReference: reference,
+        description: 'Axios Pay Wallet Deposit',
       },
       {
         headers: {
@@ -70,61 +120,86 @@ export async function initiatePayment(params: InitiatePaymentParams): Promise<st
       }
     );
 
-    const paymentCode = response.data?.paymentCode;
-    if (paymentCode) {
-      return buildQuicktellerUrl(paymentCode);
+    const paymentUrl =
+      response.data.paymentUrl ??
+      response.data.paymentLink ??
+      response.data.checkoutUrl ??
+      response.data.data?.paymentUrl ??
+      response.data.data?.paymentLink ??
+      response.data.data?.checkoutUrl;
+
+    if (!paymentUrl) {
+      console.error('[Interswitch] Checkout initiation returned empty payment URL', {
+        data: response.data,
+      });
+      throw new Error('PAYMENT_INIT_FAILED');
     }
 
-    return buildQuicktellerFallbackUrl();
-  } catch {
-    return buildQuicktellerFallbackUrl();
+    return { paymentUrl, reference };
+  } catch (error) {
+    logInterswitchApiError('Checkout initiation', error);
+    throw new Error('PAYMENT_INIT_FAILED');
   }
 }
 
-function buildQuicktellerUrl(paymentCode: string): string {
-  return `https://qa.interswitchng.com/paymentgateway/link/pay/${paymentCode}`;
-}
+export type InterswitchTransactionStatus = 'PAID' | 'PENDING' | 'FAILED';
 
-function buildQuicktellerFallbackUrl(): string {
-  return `https://qa.interswitchng.com/paymentgateway/link/pay/${env.INTERSWITCH_PAY_ITEM_ID}`;
-}
-
-export async function queryTransaction(txRef: string, amountInKobo: number): Promise<{
-  responseCode: string;
-  responseDescription: string;
-  amount: number;
-  transactionReference: string;
-}> {
-  const hash = crypto
-    .createHash('sha512')
-    .update(`${env.INTERSWITCH_MERCHANT_CODE}:${txRef}:${env.INTERSWITCH_CLIENT_SECRET}`)
-    .digest('hex');
-
+export async function queryTransaction(
+  reference: string,
+  amountInKobo: number
+): Promise<InterswitchTransactionStatus> {
   const token = await getAccessToken();
-  const response = await axios.get(
-    `${env.INTERSWITCH_BASE_URL}/collections/api/v1/gettransaction.json?merchantcode=${env.INTERSWITCH_MERCHANT_CODE}&transactionreference=${txRef}&amount=${amountInKobo}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Hash: hash,
-      },
-    }
-  );
 
-  return response.data;
+  try {
+    const response = await axios.get<QueryTransactionResponse>(
+      `${env.INTERSWITCH_BASE_URL}/collections/api/v1/gettransaction.json`,
+      {
+        params: {
+          merchantcode: env.INTERSWITCH_MERCHANT_CODE,
+          transactionreference: reference,
+          amount: amountInKobo,
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const responseCode = response.data.responseCode;
+    const normalizedStatus = (response.data.status || response.data.paymentStatus || '').toUpperCase();
+
+    if (responseCode === '00' || normalizedStatus === 'PAID' || normalizedStatus === 'SUCCESSFUL') {
+      return 'PAID';
+    }
+
+    if (
+      responseCode === '09' ||
+      normalizedStatus === 'PENDING' ||
+      normalizedStatus === 'PROCESSING' ||
+      normalizedStatus === 'IN_PROGRESS'
+    ) {
+      return 'PENDING';
+    }
+
+    return 'FAILED';
+  } catch (error) {
+    logInterswitchApiError('Transaction query', error);
+    throw new Error('PAYMENT_INIT_FAILED');
+  }
 }
 
 export function verifyWebhookSignature(rawBody: Buffer, signature: string): boolean {
+  if (!signature) {
+    return false;
+  }
+
   const expected = crypto
     .createHmac('sha512', env.INTERSWITCH_WEBHOOK_SECRET)
     .update(rawBody)
     .digest('hex');
 
   try {
-    return crypto.timingSafeEqual(
-      Buffer.from(expected, 'hex'),
-      Buffer.from(signature, 'hex')
-    );
+    return crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(signature, 'hex'));
   } catch {
     return false;
   }

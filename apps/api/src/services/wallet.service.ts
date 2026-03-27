@@ -2,9 +2,9 @@ import Decimal from 'decimal.js';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { getRate } from './rates.service';
-import { initiatePayment } from './interswitch.service';
-import { env } from '../config/env';
+import { initiatePayment, queryTransaction } from './interswitch.service';
 import { verifyPinToken } from './pin.service';
+import { sendDepositConfirmationEmail } from './email.service';
 
 const FEE_RATE = new Decimal('0.015'); // 1.5%
 
@@ -17,45 +17,36 @@ export async function getWallets(userId: string) {
 
 export async function fundWallet(
   userId: string,
-  currency: string,
   amount: number,
-  userEmail: string,
-  userName: string
+  userEmail: string
 ): Promise<{ paymentUrl: string; reference: string }> {
   const decimalAmount = new Decimal(amount);
-  if (decimalAmount.lte(0)) throw new Error('INVALID_AMOUNT');
+  if (decimalAmount.lt(100)) throw new Error('INVALID_AMOUNT');
 
-  const txRef = `AXP-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
-  const amountInKobo = decimalAmount.mul(100).floor().toNumber();
+  const { paymentUrl, reference } = await initiatePayment({
+    amount,
+    userId,
+    userEmail,
+  });
 
-  const transaction = await prisma.transaction.create({
+  await prisma.transaction.create({
     data: {
       userId,
       type: 'DEPOSIT',
       status: 'PENDING',
-      fromCurrency: currency,
-      toCurrency: currency,
+      fromCurrency: 'NGN',
+      toCurrency: 'NGN',
       fromAmount: decimalAmount,
       toAmount: decimalAmount,
       exchangeRate: new Decimal(1),
       fee: new Decimal(0),
-      reference: txRef,
-      narration: `Wallet funding — ${currency}`,
+      reference,
+      narration: 'Wallet funding — NGN',
+      metadata: { provider: 'interswitch' },
     },
   });
 
-  const redirectUrl = 'https://axioslast-web.vercel.app/deposit/callback';
-
-  const paymentUrl = await initiatePayment({
-    txRef,
-    amount: amountInKobo,
-    currency,
-    customerEmail: userEmail,
-    customerName: userName,
-    redirectUrl,
-  });
-
-  return { paymentUrl, reference: transaction.reference! };
+  return { paymentUrl, reference };
 }
 
 export async function swapCurrency(
@@ -213,13 +204,21 @@ export async function getTransaction(userId: string, transactionId: string) {
   return transaction;
 }
 
-export async function completeDeposit(reference: string): Promise<void> {
+export async function completeDeposit(reference: string): Promise<boolean> {
   const transaction = await prisma.transaction.findUnique({
     where: { reference },
+    include: {
+      user: {
+        select: {
+          email: true,
+          firstName: true,
+        },
+      },
+    },
   });
 
   if (!transaction || transaction.status !== 'PENDING' || transaction.type !== 'DEPOSIT') {
-    return;
+    return false;
   }
 
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -244,5 +243,69 @@ export async function completeDeposit(reference: string): Promise<void> {
         balance: { increment: Number(transaction.toAmount) },
       },
     });
+
+    await tx.transaction.update({
+      where: { id: transaction.id },
+      data: {
+        metadata: {
+          ...(transaction.metadata &&
+          typeof transaction.metadata === 'object' &&
+          !Array.isArray(transaction.metadata)
+            ? (transaction.metadata as Prisma.JsonObject)
+            : {}),
+          notification: `Deposit of ₦${new Decimal(transaction.toAmount.toString()).toFixed(2)} successful`,
+        },
+      },
+    });
+
+    await tx.notification.create({
+      data: {
+        userId: transaction.userId,
+        type: 'DEPOSIT',
+        message: `Deposit of ₦${new Decimal(transaction.toAmount.toString()).toFixed(2)} successful`,
+        metadata: { reference: transaction.reference },
+      },
+    });
   });
+
+  try {
+    await sendDepositConfirmationEmail(
+      transaction.user.email,
+      transaction.user.firstName,
+      new Decimal(transaction.toAmount.toString()).toFixed(2)
+    );
+  } catch (error) {
+    console.error('Deposit confirmation email failed', error);
+  }
+
+  return true;
+}
+
+export async function verifyDeposit(userId: string, reference: string): Promise<{
+  status: 'PAID' | 'PENDING' | 'FAILED';
+  amount: string;
+  currency: string;
+  createdAt: Date;
+}> {
+  const transaction = await prisma.transaction.findUnique({
+    where: { reference },
+  });
+
+  if (!transaction || transaction.userId !== userId || transaction.type !== 'DEPOSIT') {
+    throw new Error('TRANSACTION_NOT_FOUND');
+  }
+
+  const amountInKobo = new Decimal(transaction.toAmount.toString()).mul(100).toNumber();
+  const status = await queryTransaction(reference, amountInKobo);
+
+  if (status === 'PAID' && transaction.status === 'PENDING') {
+    await completeDeposit(reference);
+  }
+
+  return {
+    status,
+    amount: new Decimal(transaction.toAmount.toString()).toFixed(2),
+    currency: transaction.toCurrency,
+    createdAt: transaction.createdAt,
+  };
 }

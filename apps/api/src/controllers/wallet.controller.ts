@@ -4,11 +4,8 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import * as walletService from '../services/wallet.service';
 import { prisma } from '../config/prisma';
 
-const SUPPORTED_CURRENCIES = ['NGN', 'UGX', 'KES', 'GHS', 'ZAR'];
-
 const fundSchema = z.object({
-  currency: z.enum(['NGN', 'UGX', 'KES', 'GHS', 'ZAR']),
-  amount: z.number().min(100),
+  amount: z.number().positive().min(100),
 });
 
 const swapSchema = z.object({
@@ -32,7 +29,7 @@ export async function fundWallet(req: AuthRequest, res: Response, next: NextFunc
 
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
-      select: { email: true, firstName: true, lastName: true },
+      select: { email: true },
     });
 
     if (!user) {
@@ -42,10 +39,8 @@ export async function fundWallet(req: AuthRequest, res: Response, next: NextFunc
 
     const result = await walletService.fundWallet(
       req.userId!,
-      data.currency,
       data.amount,
-      user.email,
-      `${user.firstName} ${user.lastName}`
+      user.email
     );
 
     res.json(result);
@@ -54,6 +49,15 @@ export async function fundWallet(req: AuthRequest, res: Response, next: NextFunc
       res.status(400).json({ error: 'VALIDATION_ERROR', details: err.errors });
       return;
     }
+    next(err);
+  }
+}
+
+export async function verifyDeposit(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await walletService.verifyDeposit(req.userId!, req.params.reference);
+    res.json(result);
+  } catch (err) {
     next(err);
   }
 }

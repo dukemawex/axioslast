@@ -30,6 +30,7 @@ model User {
   updatedAt        DateTime    @updatedAt
   wallets          Wallet[]
   transactions     Transaction[]
+  notifications    Notification[]
   sessions         Session[]
 }
 
@@ -80,6 +81,18 @@ model Session {
   @@index([userId])
 }
 
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType @default(DEPOSIT)
+  message   String
+  metadata  Json?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
 model ExchangeRate {
   id           String   @id @default(cuid())
   fromCurrency String
@@ -114,4 +127,8 @@ enum TransactionStatus {
   COMPLETED
   FAILED
   REVERSED
+}
+
+enum NotificationType {
+  DEPOSIT
 }
