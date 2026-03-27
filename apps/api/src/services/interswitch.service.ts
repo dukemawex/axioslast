@@ -7,21 +7,15 @@ import { prisma } from '../config/prisma';
 import { sendRateProvidersOutageEmail } from './email.service';
 
 const TOKEN_CACHE_KEY = 'interswitch:token';
+const BANK_LIST_CACHE_KEY = 'interswitch:banks';
+const BANK_LIST_CACHE_TTL = 24 * 60 * 60; // 24 hours in seconds
+const MAX_RETRIES = 3;
+const BACKOFF_BASE_MS = 1000;
+const MAX_BACKOFF_MS = 8000;
 
 interface OAuthTokenResponse {
   access_token: string;
   expires_in?: number;
-}
-
-interface CheckoutResponse {
-  paymentLink?: string;
-  paymentUrl?: string;
-  checkoutUrl?: string;
-  data?: {
-    paymentLink?: string;
-    paymentUrl?: string;
-    checkoutUrl?: string;
-  };
 }
 
 interface QueryTransactionResponse {
@@ -34,6 +28,8 @@ interface QueryTransactionResponse {
   cardToken?: string;
   paymentToken?: string;
   token?: string;
+  Description?: string;
+  description?: string;
 }
 
 function logInterswitchApiError(context: string, error: unknown): void {
@@ -48,6 +44,27 @@ function logInterswitchApiError(context: string, error: unknown): void {
   }
 
   console.error(`[Interswitch] ${context} failed`, error);
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  context: string,
+  retries = MAX_RETRIES
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries) {
+        const backoff = Math.min(BACKOFF_BASE_MS * Math.pow(2, attempt), MAX_BACKOFF_MS);
+        console.warn(`[Interswitch] ${context} attempt ${attempt + 1} failed, retrying in ${backoff}ms`, error);
+        await new Promise((resolve) => setTimeout(resolve, backoff));
+      }
+    }
+  }
+  throw lastError;
 }
 
 export async function getAccessToken(): Promise<string> {
@@ -65,16 +82,19 @@ export async function getAccessToken(): Promise<string> {
   ).toString('base64');
 
   try {
-    const response = await axios.post<OAuthTokenResponse>(
-      `${env.INTERSWITCH_PASSPORT_URL}/passport/oauth/token`,
-      'grant_type=client_credentials&scope=profile',
-      {
-        timeout: 20000,
-        headers: {
-          Authorization: `Basic ${credentials}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }
+    const response = await withRetry(
+      () => axios.post<OAuthTokenResponse>(
+        `${env.INTERSWITCH_PASSPORT_URL}/passport/oauth/token`,
+        'grant_type=client_credentials&scope=profile',
+        {
+          timeout: 20000,
+          headers: {
+            Authorization: `Basic ${credentials}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }
+      ),
+      'OAuth token fetch'
     );
 
     const token = response.data.access_token;
@@ -90,7 +110,7 @@ export async function getAccessToken(): Promise<string> {
     return token;
   } catch (error) {
     logInterswitchApiError('OAuth token fetch', error);
-    throw new Error('PAYMENT_INIT_FAILED');
+    throw new Error('INTERSWITCH_AUTH_FAILED');
   }
 }
 
@@ -98,80 +118,25 @@ interface InitiatePaymentParams {
   amount: number; // amount in NGN
   userId: string;
   userEmail: string;
+  userName?: string;
+  userPhone?: string;
+  description?: string;
+  reference?: string;
 }
 
 export async function initiatePayment(
   params: InitiatePaymentParams
-): Promise<{ paymentUrl: string; reference: string }> {
-  const reference = nanoid(20);
+): Promise<{ reference: string; amountInKobo: number }> {
+  const reference = params.reference ?? nanoid(20);
   const amountInKobo = Math.round(params.amount * 100);
-  const token = await getAccessToken();
 
-  const checkoutEndpointCandidates = [
-    '/collections/api/v1/getcheckupurl',
-    '/collections/api/v1/getcheckouturl',
-  ];
+  console.info('[Interswitch] initiatePayment', {
+    userId: params.userId,
+    amountInKobo,
+    reference,
+  });
 
-  try {
-    let response: { data: CheckoutResponse } | null = null;
-    let lastError: unknown = null;
-
-    for (const endpoint of checkoutEndpointCandidates) {
-      try {
-        response = await axios.post<CheckoutResponse>(
-          `${env.INTERSWITCH_BASE_URL}${endpoint}`,
-          {
-            merchantCode: env.INTERSWITCH_MERCHANT_CODE,
-            payableCode: env.INTERSWITCH_PAY_ITEM_ID,
-            amount: amountInKobo,
-            redirectUrl: `${env.FRONTEND_URL}/dashboard/deposit/callback`,
-            currencyCode: '566',
-            customerId: params.userId,
-            customerEmail: params.userEmail,
-            transactionReference: reference,
-            description: 'Axios Pay Wallet Deposit',
-          },
-          {
-            timeout: 25000,
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-        break;
-      } catch (error) {
-        lastError = error;
-        if (axios.isAxiosError(error) && error.response?.status !== 404) {
-          break;
-        }
-      }
-    }
-
-    if (!response) {
-      throw lastError ?? new Error('PAYMENT_INIT_FAILED');
-    }
-
-    const paymentUrl =
-      response.data.paymentUrl ??
-      response.data.paymentLink ??
-      response.data.checkoutUrl ??
-      response.data.data?.paymentUrl ??
-      response.data.data?.paymentLink ??
-      response.data.data?.checkoutUrl;
-
-    if (!paymentUrl) {
-      console.error('[Interswitch] Checkout initiation returned empty payment URL', {
-        data: response.data,
-      });
-      throw new Error('PAYMENT_INIT_FAILED');
-    }
-
-    return { paymentUrl, reference };
-  } catch (error) {
-    logInterswitchApiError('Checkout initiation', error);
-    throw new Error('PAYMENT_INIT_FAILED');
-  }
+  return { reference, amountInKobo };
 }
 
 export type InterswitchTransactionStatus = 'PAID' | 'PENDING' | 'FAILED';
@@ -180,6 +145,7 @@ export interface InterswitchTransactionQueryResult {
   status: InterswitchTransactionStatus;
   amountInKobo: number | null;
   responseCode?: string;
+  responseDescription?: string;
   cardToken?: string;
 }
 
@@ -204,23 +170,35 @@ export async function queryTransaction(
 ): Promise<InterswitchTransactionQueryResult> {
   const token = await getAccessToken();
 
+  console.info('[Interswitch] queryTransaction', { reference, amountInKobo });
+
   try {
-    const response = await axios.get<QueryTransactionResponse>(
-      `${env.INTERSWITCH_BASE_URL}/collections/api/v1/gettransaction.json`,
-      {
-        timeout: 25000,
-        params: {
-          merchantcode: env.INTERSWITCH_MERCHANT_CODE,
-          transactionreference: reference,
-          amount: amountInKobo,
-        },
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
+    const response = await withRetry(
+      () => axios.get<QueryTransactionResponse>(
+        `${env.INTERSWITCH_BASE_URL}/collections/api/v1/gettransaction.json`,
+        {
+          timeout: 25000,
+          params: {
+            merchantcode: env.INTERSWITCH_MERCHANT_CODE,
+            transactionreference: reference,
+            amount: amountInKobo,
+          },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      ),
+      'Transaction query'
     );
 
+    console.info('[Interswitch] queryTransaction response', {
+      reference,
+      status: response.status,
+      data: response.data,
+    });
+
     const responseCode = response.data.ResponseCode ?? response.data.responseCode;
+    const responseDescription = response.data.Description ?? response.data.description;
     const normalizedStatus = (response.data.status || response.data.paymentStatus || '').toUpperCase();
     const queriedAmount = normalizeAmountInKobo(response.data.Amount ?? response.data.amount);
     const cardToken =
@@ -236,11 +214,11 @@ export async function queryTransaction(
         env.ADMIN_EMAIL,
         `Interswitch amount mismatch detected\nreference=${reference}\nexpected=${amountInKobo}\nactual=${queriedAmount}`
       ).catch(() => {});
-      return { status: 'FAILED', amountInKobo: queriedAmount, responseCode, cardToken };
+      return { status: 'FAILED', amountInKobo: queriedAmount, responseCode, responseDescription, cardToken };
     }
 
     if (responseCode === '00' || normalizedStatus === 'PAID' || normalizedStatus === 'SUCCESSFUL') {
-      return { status: 'PAID', amountInKobo: queriedAmount, responseCode, cardToken };
+      return { status: 'PAID', amountInKobo: queriedAmount, responseCode, responseDescription, cardToken };
     }
 
     if (
@@ -249,10 +227,10 @@ export async function queryTransaction(
       normalizedStatus === 'PROCESSING' ||
       normalizedStatus === 'IN_PROGRESS'
     ) {
-      return { status: 'PENDING', amountInKobo: queriedAmount, responseCode, cardToken };
+      return { status: 'PENDING', amountInKobo: queriedAmount, responseCode, responseDescription, cardToken };
     }
 
-    return { status: 'FAILED', amountInKobo: queriedAmount, responseCode, cardToken };
+    return { status: 'FAILED', amountInKobo: queriedAmount, responseCode, responseDescription, cardToken };
   } catch (error) {
     logInterswitchApiError('Transaction query', error);
     throw new Error('PAYMENT_INIT_FAILED');
@@ -315,23 +293,28 @@ export async function chargeToken(
 
 export async function initiateRefund(
   transactionRef: string,
-  amount: number,
+  amountInKobo: number,
   reason: string
 ): Promise<{ status: string; reference: string }> {
   const token = await getAccessToken();
-  const response = await axios.post(
-    `${env.INTERSWITCH_BASE_URL}/api/v1/refunds`,
-    {
-      transactionReference: transactionRef,
-      amount,
-      refundReason: reason,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+  console.info('[Interswitch] initiateRefund', { transactionRef, amountInKobo, reason });
+  const response = await withRetry(
+    () => axios.post(
+      `${env.INTERSWITCH_BASE_URL}/api/v1/refunds`,
+      {
+        transactionReference: transactionRef,
+        amount: amountInKobo,
+        refundReason: reason,
       },
-    }
+      {
+        timeout: 25000,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    ),
+    'Refund'
   );
   return {
     status: String((response.data as { status?: string }).status || 'PENDING'),
@@ -354,14 +337,35 @@ export async function createPaymentLink(
 }
 
 export async function getBankList(): Promise<Array<{ code: string; name: string }>> {
+  try {
+    const cached = await redis.get(BANK_LIST_CACHE_KEY);
+    if (cached) {
+      return JSON.parse(cached) as Array<{ code: string; name: string }>;
+    }
+  } catch {
+    // ignore cache miss
+  }
+
   const token = await getAccessToken();
-  const response = await axios.get(`${env.INTERSWITCH_BASE_URL}/api/v1/banks`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const response = await withRetry(
+    () => axios.get(`${env.INTERSWITCH_BASE_URL}/api/v1/banks`, {
+      timeout: 25000,
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    'Get bank list'
+  );
   const banks = (response.data as { data?: Array<{ code?: string; name?: string }> }).data || [];
-  return banks
+  const result = banks
     .filter((bank) => bank.code && bank.name)
     .map((bank) => ({ code: String(bank.code), name: String(bank.name) }));
+
+  try {
+    await redis.set(BANK_LIST_CACHE_KEY, JSON.stringify(result), 'EX', BANK_LIST_CACHE_TTL);
+  } catch {
+    // ignore cache write failure
+  }
+
+  return result;
 }
 
 export async function resolveAccount(
@@ -369,18 +373,20 @@ export async function resolveAccount(
   accountNumber: string
 ): Promise<{ accountName: string }> {
   const token = await getAccessToken();
-  const response = await axios.post(
-    `${env.INTERSWITCH_BASE_URL}/api/v1/transfers/resolve`,
-    {
-      bankCode,
-      accountNumber,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    }
+  console.info('[Interswitch] resolveAccount', { bankCode, accountNumber });
+  const response = await withRetry(
+    () => axios.post(
+      `${env.INTERSWITCH_BASE_URL}/api/v1/transfers/resolve`,
+      { bankCode, accountNumber },
+      {
+        timeout: 25000,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    ),
+    'Resolve account'
   );
   const accountName = String(
     (response.data as { accountName?: string; data?: { accountName?: string } }).accountName ||
@@ -388,7 +394,7 @@ export async function resolveAccount(
       ''
   );
   if (!accountName) {
-    throw new Error('PAYMENT_INIT_FAILED');
+    throw new Error('ACCOUNT_NOT_FOUND');
   }
   return { accountName };
 }
@@ -397,9 +403,10 @@ export interface SendMoneyParams {
   beneficiaryBankCode: string;
   beneficiaryAccountNumber: string;
   beneficiaryAccountName: string;
-  amount: number;
+  amount: number; // in NGN
   narration?: string;
   senderName: string;
+  reference?: string;
 }
 
 export async function sendMoney(
@@ -407,30 +414,99 @@ export async function sendMoney(
   params: SendMoneyParams
 ): Promise<{ status: 'SUCCESS' | 'FAILED'; reference: string }> {
   const token = await getAccessToken();
-  const reference = nanoid(20);
-  const response = await axios.post(
-    `${env.INTERSWITCH_BASE_URL}/api/v1/transfers`,
-    {
-      beneficiaryBankCode: params.beneficiaryBankCode,
-      beneficiaryAccountNumber: params.beneficiaryAccountNumber,
-      beneficiaryAccountName: params.beneficiaryAccountName,
-      amount: Math.round(params.amount * 100),
-      narration: params.narration || 'Axios Pay Wallet Withdrawal',
-      senderName: params.senderName,
-      reference,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+  const reference = params.reference ?? nanoid(20);
+  const amountInKobo = Math.round(params.amount * 100);
+
+  console.info('[Interswitch] sendMoney', {
+    beneficiaryBankCode: params.beneficiaryBankCode,
+    beneficiaryAccountNumber: params.beneficiaryAccountNumber,
+    amountInKobo,
+    reference,
+    senderName: params.senderName,
+  });
+
+  const response = await withRetry(
+    () => axios.post(
+      `${env.INTERSWITCH_BASE_URL}/api/v1/transfers`,
+      {
+        beneficiaryBankCode: params.beneficiaryBankCode,
+        beneficiaryAccountNumber: params.beneficiaryAccountNumber,
+        beneficiaryAccountName: params.beneficiaryAccountName,
+        amount: amountInKobo,
+        narration: params.narration || 'Axios Pay Wallet Withdrawal',
+        senderName: params.senderName,
+        reference,
       },
-    }
+      {
+        timeout: 30000,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    ),
+    'Send money'
+  );
+
+  const responseCode = String(
+    (response.data as { responseCode?: string; ResponseCode?: string }).responseCode ||
+    (response.data as { ResponseCode?: string }).ResponseCode ||
+    ''
   );
   const status = String((response.data as { status?: string }).status || '').toUpperCase();
-  return {
-    status: status === 'SUCCESS' ? 'SUCCESS' : 'FAILED',
-    reference,
-  };
+
+  if (responseCode !== '00' && status !== 'SUCCESS') {
+    console.error('[Interswitch] sendMoney failed', { responseCode, status, reference });
+    throw new Error('TRANSFER_FAILED');
+  }
+
+  return { status: 'SUCCESS', reference };
+}
+
+export type AirtimeNetwork = 'MTN' | 'AIRTEL' | 'GLO' | '9MOBILE';
+
+const AIRTIME_NETWORK_CODES: Record<AirtimeNetwork, string> = {
+  MTN: '01',
+  AIRTEL: '02',
+  GLO: '03',
+  '9MOBILE': '04',
+};
+
+export async function rechargeAirtime(
+  phoneNumber: string,
+  amountNGN: number,
+  network: AirtimeNetwork
+): Promise<{ status: string; reference: string }> {
+  const token = await getAccessToken();
+  const reference = nanoid(20);
+  const amountInKobo = Math.round(amountNGN * 100);
+  const networkCode = AIRTIME_NETWORK_CODES[network];
+
+  console.info('[Interswitch] rechargeAirtime', { phoneNumber, amountInKobo, network, networkCode });
+
+  const response = await withRetry(
+    () => axios.post(
+      `${env.INTERSWITCH_BASE_URL}/api/v1/airtime`,
+      {
+        phoneNumber,
+        amount: amountInKobo,
+        networkCode,
+        reference,
+      },
+      {
+        timeout: 25000,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    ),
+    'Airtime recharge'
+  );
+
+  const status = String((response.data as { status?: string }).status || 'PENDING').toUpperCase();
+  console.info('[Interswitch] rechargeAirtime response', { reference, status });
+  return { status, reference };
 }
 
 export function verifyWebhookSignature(rawBody: Buffer, signature: string): boolean {

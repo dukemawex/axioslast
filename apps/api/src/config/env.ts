@@ -23,6 +23,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_INTERSWITCH_MERCHANT_CODE: z.string().min(1).default('placeholder-merchant-code'),
   NEXT_PUBLIC_INTERSWITCH_PAY_ITEM_ID: z.string().min(1).default('placeholder-pay-item-id'),
   INTERSWITCH_WEBHOOK_SECRET: z.string().min(1).default(generatedWebhookSecret),
+  INTERSWITCH_ENV: z.enum(['TEST', 'LIVE']).default('TEST'),
   SMTP_USER: z.string().email().default('axiosbuild@gmail.com'),
   SMTP_PASS: z.string().min(1).default('placeholder-smtp-pass'),
   TWILIO_ACCOUNT_SID: z.string().min(1).default('placeholder-twilio-sid'),

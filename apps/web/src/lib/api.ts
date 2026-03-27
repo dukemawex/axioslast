@@ -133,7 +133,12 @@ export const api = {
   kyc: {
     requirements: () => apiClient.get('/kyc/requirements'),
     status: () => apiClient.get('/kyc/status'),
+    limits: () => apiClient.get('/kyc/limits'),
+    identityTypes: (country: string) => apiClient.get(`/kyc/identity-types/${country}`),
+    verify: (data: unknown) => apiClient.post('/kyc/verify', data),
     verifyIdentity: (data: unknown) => apiClient.post('/kyc/verify-identity', data),
+    bvn: (data: unknown) => apiClient.post('/kyc/bvn', data),
+    nin: (data: unknown) => apiClient.post('/kyc/nin', data),
   },
   wallets: {
     getAll: () => apiClient.get('/wallets'),
