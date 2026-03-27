@@ -23,7 +23,7 @@ function VerifyEmailPageContent() {
 
   const storedEmail = typeof window !== 'undefined' ? sessionStorage.getItem('verify_email') || '' : '';
   const maskedEmail = storedEmail
-    ? storedEmail.replace(/^(.).+(@.+)$/, (_match, first, domain) => `${first}***${domain}`)
+    ? storedEmail.replace(/^(.).*(@.+)$/, (_match, first, domain) => `${first}***${domain}`)
     : 'your email';
 
   useEffect(() => {

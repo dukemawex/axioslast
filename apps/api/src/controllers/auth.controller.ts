@@ -44,6 +44,8 @@ const resetPasswordSchema = z.object({
 const resendOTPSchema = z.object({
   userId: z.string().min(1).optional(),
   email: z.string().email().optional(),
+}).refine((data) => Boolean(data.userId || data.email), {
+  message: 'Provide userId or email to resend verification',
 });
 
 const verifyEmailLinkSchema = z.object({
@@ -194,13 +196,6 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
 export async function resendOTP(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const data = resendOTPSchema.parse(req.body);
-    if (!data.userId && !data.email) {
-      res.status(400).json({
-        error: 'VALIDATION_ERROR',
-        details: [{ message: 'Provide userId or email to resend verification' }],
-      });
-      return;
-    }
     const result = await authService.resendOTP(data);
     res.json({ message: 'Verification email sent! Check your inbox.', userId: result.userId });
   } catch (err) {
