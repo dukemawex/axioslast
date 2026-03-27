@@ -26,11 +26,20 @@ export default function KycPage() {
     queryKey: ['kyc', 'status'],
     queryFn: () => api.kyc.status().then((r) => r.data),
   });
+  const [submitError, setSubmitError] = useState('');
+  const [submitFeedback, setSubmitFeedback] = useState('');
   const mutation = useMutation({
     mutationFn: () => api.kyc.verifyIdentity(form).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kyc', 'status'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
+      setSubmitFeedback('Identity verified successfully. Tier 2 benefits are now active.');
+      setSubmitError('');
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { message?: string } } };
+      setSubmitError(e?.response?.data?.message || 'Identity verification failed. Please check your details and try again.');
+      setSubmitFeedback('');
     },
   });
   const status = data?.idVerificationStatus || 'NOT_SUBMITTED';
@@ -49,6 +58,39 @@ export default function KycPage() {
     }
     return form.idNumber;
   }, [form.idNumber, user?.nationality]);
+
+  const idValidationError = useMemo(() => {
+    const id = form.idNumber.trim().toUpperCase();
+    const nationality = (user?.nationality || 'NG').toUpperCase();
+    if (!id) return 'ID number is required.';
+    if (nationality === 'NG' && !/^\d{11}$/.test(id)) return 'NIN must be exactly 11 digits.';
+    if (nationality === 'UG' && !/^[A-Za-z0-9]{14}$/.test(id)) return 'Ndaga Muntu ID must be 14 alphanumeric characters.';
+    if (nationality === 'KE' && !/^\d{8}$/.test(id)) return 'Kenyan National ID must be exactly 8 digits.';
+    if (nationality === 'GH' && !/^GHA-\d{9}-\d$/.test(id)) return 'Ghana Card must match GHA-123456789-0.';
+    if (nationality === 'ZA' && !/^\d{13}$/.test(id)) return 'South African ID must be exactly 13 digits.';
+    return '';
+  }, [form.idNumber, user?.nationality]);
+
+  const canSubmit =
+    Boolean(form.firstName.trim()) &&
+    Boolean(form.lastName.trim()) &&
+    Boolean(form.dateOfBirth) &&
+    !idValidationError &&
+    !mutation.isPending;
+
+  function handleSubmit() {
+    setSubmitError('');
+    setSubmitFeedback('');
+    if (!form.firstName.trim() || !form.lastName.trim() || !form.dateOfBirth) {
+      setSubmitError('First name, last name, and date of birth are required.');
+      return;
+    }
+    if (idValidationError) {
+      setSubmitError(idValidationError);
+      return;
+    }
+    mutation.mutate();
+  }
 
   return (
     <div className="max-w-2xl">
@@ -80,6 +122,11 @@ export default function KycPage() {
                 Verified {data?.firstName} {data?.lastName} on {data?.idVerifiedAt ? new Date(data.idVerifiedAt).toLocaleDateString() : ''}
               </p>
             ) : null}
+            {status === 'VERIFIED' ? (
+              <p className="text-sm text-success mt-1" aria-live="polite">
+                ✅ Tier 2 benefits unlocked: swap up to {Number(data?.dailySwapLimit || 0).toLocaleString()} NGN/day and access all features.
+              </p>
+            ) : null}
             <p className="text-xs text-text-muted mt-2">
               Daily limit: {Number(data?.dailySwapUsed || 0).toLocaleString()} / {Number(data?.dailySwapLimit || 0).toLocaleString()} NGN
             </p>
@@ -90,28 +137,47 @@ export default function KycPage() {
                 <label className="text-sm font-medium text-text-primary">{requirements?.label || 'National ID'}</label>
                 <input
                   value={maskedInput}
-                  onChange={(e) => setForm((prev) => ({ ...prev, idNumber: e.target.value }))}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, idNumber: e.target.value }));
+                    setSubmitError('');
+                    setSubmitFeedback('');
+                  }}
                   className="w-full px-3 py-2.5 rounded-btn border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-brand-amber text-text-primary mt-1"
                   placeholder={requirements?.example || ''}
                 />
                 <p className="text-xs text-text-muted mt-1">{formatHint}</p>
+                {idValidationError ? <p className="text-xs text-error mt-1" role="alert">{idValidationError}</p> : null}
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium text-text-primary">First name</label>
-                  <input value={form.firstName} onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))} className="w-full px-3 py-2.5 rounded-btn border border-border bg-surface mt-1" />
+                  <input value={form.firstName} onChange={(e) => {
+                    setForm((prev) => ({ ...prev, firstName: e.target.value }));
+                    setSubmitError('');
+                    setSubmitFeedback('');
+                  }} className="w-full px-3 py-2.5 rounded-btn border border-border bg-surface mt-1" />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-text-primary">Last name</label>
-                  <input value={form.lastName} onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))} className="w-full px-3 py-2.5 rounded-btn border border-border bg-surface mt-1" />
+                  <input value={form.lastName} onChange={(e) => {
+                    setForm((prev) => ({ ...prev, lastName: e.target.value }));
+                    setSubmitError('');
+                    setSubmitFeedback('');
+                  }} className="w-full px-3 py-2.5 rounded-btn border border-border bg-surface mt-1" />
                 </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-text-primary">Date of birth</label>
-                <input type="date" value={form.dateOfBirth} onChange={(e) => setForm((prev) => ({ ...prev, dateOfBirth: e.target.value }))} className="w-full px-3 py-2.5 rounded-btn border border-border bg-surface mt-1" />
+                <input type="date" value={form.dateOfBirth} onChange={(e) => {
+                  setForm((prev) => ({ ...prev, dateOfBirth: e.target.value }));
+                  setSubmitError('');
+                  setSubmitFeedback('');
+                }} className="w-full px-3 py-2.5 rounded-btn border border-border bg-surface mt-1" />
               </div>
               <p className="text-xs text-text-muted">Your ID number is encrypted and never stored in plain text. We only use it to verify your identity.</p>
-              <Button className="w-full" loading={mutation.isPending} onClick={() => mutation.mutate()}>Verify Identity</Button>
+              {submitError ? <p className="text-xs text-error" role="alert" aria-live="polite">{submitError}</p> : null}
+              {submitFeedback ? <p className="text-xs text-success" role="status" aria-live="polite">{submitFeedback}</p> : null}
+              <Button className="w-full" loading={mutation.isPending} disabled={!canSubmit} onClick={handleSubmit}>Verify Identity</Button>
               <p className="text-xs text-text-muted">Attempts remaining: {data?.attemptsRemaining ?? 3}</p>
             </Card>
           ) : null}
