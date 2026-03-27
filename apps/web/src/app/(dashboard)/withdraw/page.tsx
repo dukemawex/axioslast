@@ -108,21 +108,39 @@ export default function WithdrawPage() {
         <p className="text-sm text-text-secondary">Available NGN balance: ₦{ngnBalance.toFixed(2)}</p>
         {mode === 'bank' ? (
           <>
-        <div className="space-y-1">
-          <label className="text-sm font-medium text-text-primary">Bank</label>
-          <select
-            value={bankCode}
-            onChange={(e) => setBankCode(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-btn border border-border text-text-primary bg-surface focus:outline-none focus:ring-2 focus:ring-brand-amber"
-          >
-            <option value="">Select bank</option>
-            {(banks || []).map((bank) => (
-              <option key={bank.code} value={bank.code}>
-                {bank.name}
-              </option>
-            ))}
-          </select>
-        </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-text-primary">Bank</label>
+              <select
+                value={bankCode}
+                onChange={(e) => setBankCode(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-btn border border-border text-text-primary bg-surface focus:outline-none focus:ring-2 focus:ring-brand-amber"
+              >
+                <option value="">Select bank</option>
+                {(banks || []).map((bank) => (
+                  <option key={bank.code} value={bank.code}>
+                    {bank.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-text-primary">Account Number</label>
+              <input
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                className="w-full px-3 py-2.5 rounded-btn border border-border text-text-primary bg-surface focus:outline-none focus:ring-2 focus:ring-brand-amber"
+                placeholder="0123456789"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-text-primary">Account Name</label>
+              <input
+                value={accountName}
+                readOnly
+                className="w-full px-3 py-2.5 rounded-btn border border-border text-text-primary bg-subtle focus:outline-none"
+                placeholder="Resolved account name"
+              />
+            </div>
           </>
         ) : (
           <div className="space-y-1">
@@ -136,24 +154,6 @@ export default function WithdrawPage() {
             <p className="text-xs text-text-muted">Mock internal transfer for demo.</p>
           </div>
         )}
-        <div className="space-y-1">
-          <label className="text-sm font-medium text-text-primary">Account Number</label>
-          <input
-            value={accountNumber}
-            onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
-            className="w-full px-3 py-2.5 rounded-btn border border-border text-text-primary bg-surface focus:outline-none focus:ring-2 focus:ring-brand-amber"
-            placeholder="0123456789"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium text-text-primary">Account Name</label>
-          <input
-            value={accountName}
-            readOnly
-            className="w-full px-3 py-2.5 rounded-btn border border-border text-text-primary bg-subtle focus:outline-none"
-            placeholder="Resolved account name"
-          />
-        </div>
         <div className="space-y-1">
           <label className="text-sm font-medium text-text-primary">Amount (₦)</label>
           <input

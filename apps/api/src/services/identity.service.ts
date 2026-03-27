@@ -109,8 +109,7 @@ export async function verifyNigerianNIN(
   if (user.idVerificationStatus === 'VERIFIED') throw new Error('ID_ALREADY_VERIFIED');
 
   const profileName = `${user.firstName} ${user.lastName}`.trim();
-  const submittedName = `${firstName} ${lastName}`.trim();
-  if (!namesMatch(firstName, lastName, profileName) || !namesMatch(user.firstName, user.lastName, submittedName)) {
+  if (!namesMatch(firstName, lastName, profileName)) {
     await markFailed(userId, 'Name does not match NIN records', 'dojah');
     return { verified: false, reason: 'Name does not match NIN records' };
   }
@@ -148,8 +147,7 @@ export async function verifySmileIdentity(
   if (user.idVerificationStatus === 'VERIFIED') throw new Error('ID_ALREADY_VERIFIED');
 
   const profileName = `${user.firstName} ${user.lastName}`.trim();
-  const submittedName = `${firstName} ${lastName}`.trim();
-  if (!namesMatch(firstName, lastName, profileName) || !namesMatch(user.firstName, user.lastName, submittedName)) {
+  if (!namesMatch(firstName, lastName, profileName)) {
     await markFailed(userId, 'ID details do not match records', 'smile_identity');
     return { verified: false, reason: 'ID details do not match records' };
   }

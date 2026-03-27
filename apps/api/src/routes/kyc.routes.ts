@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth, type AuthRequest } from '../middleware/auth.middleware';
 import { prisma } from '../config/prisma';
@@ -6,6 +7,17 @@ import { redis } from '../config/redis';
 import { getVerificationRequirements, verifyIdentity } from '../services/identity.service';
 
 const router = Router();
+const kycLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: { error: 'RATE_LIMIT', message: 'Too many requests. Try again later.' },
+});
+
+const verifyIdentityLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'RATE_LIMIT', message: 'Too many verification attempts. Try again later.' },
+});
 
 const verifySchema = z.object({
   idNumber: z.string().min(1),
@@ -48,6 +60,7 @@ async function incrementAttemptCount(userId: string): Promise<number> {
   }
 }
 
+router.use(kycLimiter);
 router.use(requireAuth);
 
 router.get('/requirements', async (req: AuthRequest, res, next) => {
@@ -88,7 +101,7 @@ router.get('/status', async (req: AuthRequest, res, next) => {
   }
 });
 
-router.post('/verify-identity', async (req: AuthRequest, res, next) => {
+router.post('/verify-identity', verifyIdentityLimiter, async (req: AuthRequest, res, next) => {
   try {
     const payload = verifySchema.parse(req.body);
     const user = await prisma.user.findUnique({
