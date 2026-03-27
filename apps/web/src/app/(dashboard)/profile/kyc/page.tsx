@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useAuthStore } from '@/store/authStore';
 
+const DEFAULT_NATIONALITY = 'NG';
+
 export default function KycPage() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -47,7 +49,7 @@ export default function KycPage() {
   const formatHint = requirements?.format || '';
 
   const maskedInput = useMemo(() => {
-    if ((user?.nationality || 'NG') === 'GH') {
+    if ((user?.nationality || DEFAULT_NATIONALITY) === 'GH') {
       const plain = form.idNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       if (plain.startsWith('GHA')) {
         const rest = plain.slice(3);
@@ -61,7 +63,7 @@ export default function KycPage() {
 
   const idValidationError = useMemo(() => {
     const id = form.idNumber.trim().toUpperCase();
-    const nationality = (user?.nationality || 'NG').toUpperCase();
+    const nationality = (user?.nationality || DEFAULT_NATIONALITY).toUpperCase();
     if (!id) return 'ID number is required.';
     if (nationality === 'NG' && !/^\d{11}$/.test(id)) return 'NIN must be exactly 11 digits.';
     if (nationality === 'UG' && !/^[A-Za-z0-9]{14}$/.test(id)) return 'Ndaga Muntu ID must be 14 alphanumeric characters.';
@@ -77,6 +79,11 @@ export default function KycPage() {
     Boolean(form.dateOfBirth) &&
     !idValidationError &&
     !mutation.isPending;
+  const submitHint = canSubmit
+    ? ''
+    : !form.firstName.trim() || !form.lastName.trim() || !form.dateOfBirth
+      ? 'Enter your first name, last name, and date of birth.'
+      : idValidationError;
 
   function handleSubmit() {
     setSubmitError('');
@@ -106,6 +113,19 @@ export default function KycPage() {
               <p><strong>TIER 2 — Verified Identity</strong><br />✓ Swap up to 500,000 NGN/day • ✓ All features unlocked</p>
               <p><strong>TIER 3 — Business Verified</strong><br />✓ Swap up to 5,000,000 NGN/day • ✓ Bulk payroll + API access</p>
             </div>
+          </Card>
+          <Card>
+            <h2 className="font-semibold text-text-primary mb-3">National identity validation details</h2>
+            <div className="space-y-2 text-sm text-text-secondary">
+              <p><strong>NG (NIN):</strong> exactly 11 digits</p>
+              <p><strong>UG (Ndaga Muntu ID):</strong> 14 alphanumeric characters</p>
+              <p><strong>KE (National ID):</strong> exactly 8 digits</p>
+              <p><strong>GH (Ghana Card):</strong> format <code>GHA-123456789-0</code></p>
+              <p><strong>ZA (South African ID):</strong> exactly 13 digits with checksum validation</p>
+            </div>
+            <p className="text-xs text-text-muted mt-3">
+              Based on your profile nationality ({(user?.nationality || DEFAULT_NATIONALITY).toUpperCase()}), your ID is validated before submission.
+            </p>
           </Card>
           <Card className="text-center py-6">
             <ShieldCheck className="w-10 h-10 text-brand-amber mx-auto mb-3" />
@@ -177,7 +197,8 @@ export default function KycPage() {
               <p className="text-xs text-text-muted">Your ID number is encrypted and never stored in plain text. We only use it to verify your identity.</p>
               {submitError ? <p className="text-xs text-error" role="alert" aria-live="polite">{submitError}</p> : null}
               {submitFeedback ? <p className="text-xs text-success" role="status" aria-live="polite">{submitFeedback}</p> : null}
-              <Button className="w-full" loading={mutation.isPending} disabled={!canSubmit} onClick={handleSubmit}>Verify Identity</Button>
+              {!canSubmit ? <p className="text-xs text-text-muted">{submitHint}</p> : null}
+              <Button type="button" className="w-full" loading={mutation.isPending} disabled={!canSubmit} onClick={handleSubmit}>Verify Identity</Button>
               <p className="text-xs text-text-muted">Attempts remaining: {data?.attemptsRemaining ?? 3}</p>
             </Card>
           ) : null}
